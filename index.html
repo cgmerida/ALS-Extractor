@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ALS Extractor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Jost', 'Futura', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            live: {
+              bg: '#161616',
+              panel: '#222222',
+              raised: '#2d2d2d',
+              line: '#3a3a3a',
+              text: '#e6e6e6',
+              dim: '#8c8c8c',
+              orange: '#ff764d',
+              yellow: '#ffd23f',
+              green: '#7ad46b',
+              blue: '#6fa8ff',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background: #161616; }
+    textarea { scrollbar-color: #3a3a3a #1b1b1b; }
+    .drop-active { border-color: #ff764d !important; background: rgba(255,118,77,0.06) !important; }
+    .toggle input:checked + span { background: #ff764d; }
+    .toggle input:checked + span::after { transform: translateX(16px); background: #161616; }
+    .toggle input + span::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+      border-radius: 2px; background: #8c8c8c; transition: transform .15s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen text-live-text font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-live-line">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <!-- Ableton-style four-bar mark -->
+          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
+            <rect x="0" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="6" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="12" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="18" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="24" y="16" width="4" height="4" fill="#ff764d"/>
+          </svg>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">ALS Extractor</h1>
+        </div>
+        <p class="mt-1 text-live-dim text-sm">Ableton Live Set &rarr; Secuencias.com markers, tempo map &amp; time signatures</p>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-live-dim font-mono">
+        <span class="inline-block w-2 h-2 rounded-full bg-live-green"></span>
+        100% client-side &middot; your file never leaves this browser
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Drop zone -->
+    <label id="dropZone" for="fileInput"
+      class="block cursor-pointer border-2 border-dashed border-live-line bg-live-panel rounded-md px-6 py-10 text-center transition-colors hover:border-live-dim">
+      <input id="fileInput" type="file" accept=".als" class="sr-only" />
+      <div class="text-lg font-medium">Drop your <span class="font-mono text-live-orange">.als</span> file here</div>
+      <div class="mt-1 text-sm text-live-dim">or click to browse</div>
+      <div id="fileInfo" class="mt-4 font-mono text-xs text-live-dim hidden"></div>
+    </label>
+
+    <!-- Error banner -->
+    <div id="errorBox" role="alert" class="hidden border border-red-500/60 bg-red-500/10 text-red-200 rounded-md px-4 py-3 text-sm"></div>
+
+    <!-- Set summary -->
+    <div id="summary" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-px bg-live-line border border-live-line rounded-md overflow-hidden font-mono text-sm"></div>
+
+    <!-- Output cards -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-orange">&#9632;</span> Markers</h2>
+          <span id="countMarkers" class="font-mono text-xs text-live-dim">&ndash;</span>
+        </div>
+        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center">Locator name &rarr; absolute time</div>
+        <textarea id="outMarkers" readonly spellcheck="false"
+          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+        <div class="p-4">
+          <button data-copy="outMarkers"
+            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+        </div>
+      </article>
+
+      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-yellow">&#9632;</span> Tempo Automation</h2>
+          <span id="countTempo" class="font-mono text-xs text-live-dim">&ndash;</span>
+        </div>
+        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center justify-between gap-3">
+          <span>BPM &rarr; absolute time</span>
+          <label class="toggle flex items-center gap-2 cursor-pointer select-none" title="Insert a point 1 ms before each stepped tempo change, holding the previous BPM, so Secuencias jumps instead of ramping">
+            <span class="text-live-text">Anchor points</span>
+            <input id="anchorToggle" type="checkbox" class="sr-only" checked />
+            <span class="relative inline-block w-9 h-5 rounded-sm bg-live-raised border border-live-line"></span>
+          </label>
+        </div>
+        <textarea id="outTempo" readonly spellcheck="false"
+          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+        <div class="p-4">
+          <button data-copy="outTempo"
+            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+        </div>
+      </article>
+
+      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-blue">&#9632;</span> Time Signatures</h2>
+          <span id="countSig" class="font-mono text-xs text-live-dim">&ndash;</span>
+        </div>
+        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center">Signature &rarr; absolute time</div>
+        <textarea id="outSig" readonly spellcheck="false"
+          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+        <div class="p-4">
+          <button data-copy="outSig"
+            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+        </div>
+      </article>
+
+    </section>
+
+    <p id="notes" class="text-xs text-live-dim font-mono"></p>
+  </main>
+
+  <!-- ===================== Core logic (DOM-agnostic, testable) ===================== -->
+  <script id="core">
+  const ALS = (() => {
+    const EPS_BPM = 1e-9;
+    // Ableton stores the initial automation value at a huge negative beat (about -63072000).
+    const clampBeat = (b) => (b < 0 ? 0 : b);
+
+    // ---------- Decompression ----------
+    const PAKO_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
+
+    function isGzip(bytes) {
+      return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Could not load decompression library from CDN (offline?).'));
+        document.head.appendChild(s);
+      });
+    }
+
+    // Native DecompressionStream first (zero dependencies); pako lazily loaded only as a fallback.
+    async function decompress(arrayBuffer) {
+      const bytes = new Uint8Array(arrayBuffer);
+      if (!isGzip(bytes)) {
+        // Some tools save uncompressed XML; accept it if it looks like XML.
+        const text = new TextDecoder('utf-8').decode(bytes);
+        if (/^\s*(<\?xml|<Ableton)/.test(text)) return text;
+        throw new Error('This file is not a valid .als (not GZIP-compressed Ableton XML).');
+      }
+      if (typeof DecompressionStream === 'function') {
+        try {
+          const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+          const out = await new Response(stream).arrayBuffer();
+          return new TextDecoder('utf-8').decode(out);
+        } catch (e) {
+          throw new Error('Decompression failed — the file may be corrupted or not a valid .als.');
+        }
+      }
+      if (typeof pako === 'undefined') await loadScript(PAKO_URL);
+      try {
+        return pako.inflate(bytes, { to: 'string' });
+      } catch (e) {
+        throw new Error('Decompression failed — the file may be corrupted or not a valid .als.');
+      }
+    }
+
+    // ---------- XML helpers (element-children only, no :scope selectors) ----------
+    function kids(el, name) {
+      const out = [];
+      if (!el) return out;
+      for (let n = el.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 1 && (!name || n.nodeName === name)) out.push(n);
+      }
+      return out;
+    }
+    function child(el, name) { return kids(el, name)[0] || null; }
+    function path(el, p) {
+      for (const part of p.split('/')) { el = child(el, part); if (!el) return null; }
+      return el;
+    }
+    // Ableton writes most values as <Name Value="..."/>; tolerate plain attributes too.
+    function prop(el, name) {
+      const c = child(el, name);
+      if (c && c.getAttribute('Value') != null) return c.getAttribute('Value');
+      return el.getAttribute(name);
+    }
+
+    function findMaster(doc) {
+      const liveSet = doc.getElementsByTagName('LiveSet')[0];
+      if (!liveSet) return null;
+      // Live 12 renamed the Master track to "Main"; older sets use MasterTrack.
+      return child(liveSet, 'MasterTrack') || child(liveSet, 'MainTrack')
+        || doc.getElementsByTagName('MasterTrack')[0] || doc.getElementsByTagName('MainTrack')[0] || null;
+    }
+
+    function readEvents(eventsEl, tag) {
+      return kids(eventsEl, tag).map((e) => ({
+        beat: clampBeat(parseFloat(e.getAttribute('Time'))),
+        value: parseFloat(e.getAttribute('Value')),
+      })).filter((e) => Number.isFinite(e.beat) && Number.isFinite(e.value));
+    }
+
+    // Returns { events, source } for a Mixer parameter (Tempo / TimeSignature) of the master track.
+    function paramEvents(master, paramName, eventTag) {
+      const param = path(master, 'DeviceChain/Mixer/' + paramName) || master.getElementsByTagName(paramName)[0];
+      if (!param) return { events: [], source: 'missing' };
+
+      // 1) Modern layout (Live 9+): envelope linked via AutomationTarget Id -> PointeeId.
+      const targetId = child(param, 'AutomationTarget')?.getAttribute('Id');
+      if (targetId != null) {
+        for (const env of kids(path(master, 'AutomationEnvelopes/Envelopes'), 'AutomationEnvelope')) {
+          if (path(env, 'EnvelopeTarget/PointeeId')?.getAttribute('Value') === targetId) {
+            const ev = readEvents(path(env, 'Automation/Events'), eventTag);
+            if (ev.length) return { events: ev, source: 'envelope' };
+          }
+        }
+      }
+      // 2) Legacy layout: <Param><ArrangerAutomation><Events>.
+      const legacy = readEvents(path(param, 'ArrangerAutomation/Events'), eventTag);
+      if (legacy.length) return { events: legacy, source: 'legacy' };
+
+      // 3) No automation: the static value.
+      const manual = parseFloat(prop(param, 'Manual'));
+      if (Number.isFinite(manual)) return { events: [{ beat: 0, value: manual }], source: 'manual' };
+      return { events: [], source: 'missing' };
+    }
+
+    // ---------- Tempo map ----------
+    // Seconds elapsed over `db` beats while BPM ramps linearly (in beats) from v0 to v1.
+    function segmentSeconds(db, v0, v1) {
+      if (db <= 0) return 0;
+      if (Math.abs(v1 - v0) < EPS_BPM) return db * 60 / v0;
+      return 60 * db * Math.log(v1 / v0) / (v1 - v0);
+    }
+
+    function buildTempoMap(events) {
+      // Stable sort keeps same-beat pairs in document order: that order defines a step's before/after.
+      const pts = events.slice().sort((a, b) => a.beat - b.beat);
+      if (!pts.length) throw new Error('No tempo information found on the Master Track.');
+      if (pts[0].beat > 0) pts.unshift({ beat: 0, value: pts[0].value });
+      let sec = 0;
+      pts[0].sec = 0;
+      for (let i = 1; i < pts.length; i++) {
+        sec += segmentSeconds(pts[i].beat - pts[i - 1].beat, pts[i - 1].value, pts[i].value);
+        pts[i].sec = sec;
+      }
+      return pts;
+    }
+
+    function beatToAbsoluteTime(map, beat) {
+      beat = clampBeat(beat);
+      // Last point with beat <= target (binary search).
+      let lo = 0, hi = map.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (map[mid].beat <= beat) lo = mid; else hi = mid - 1;
+      }
+      const p = map[lo];
+      const next = map[lo + 1];
+      if (!next) return (p.sec + (beat - p.beat) * 60 / p.value) * 1000; // hold last BPM forever
+      const frac = (beat - p.beat) / (next.beat - p.beat);
+      const bpmAtBeat = p.value + (next.value - p.value) * frac;
+      return (p.sec + segmentSeconds(beat - p.beat, p.value, bpmAtBeat)) * 1000;
+    }
+
+    // ---------- Formatting ----------
+    function formatMs(ms) {
+      const t = Math.max(0, Math.round(ms));
+      const m = Math.floor(t / 60000);
+      const s = Math.floor((t % 60000) / 1000);
+      const f = t % 1000;
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(3, '0')}`;
+    }
+
+    // ---------- Secuencias tempo output ----------
+    // Groups points that land on the same millisecond; a group whose incoming and outgoing BPM differ is a step.
+    function tempoPoints(map, withAnchors) {
+      const groups = [];
+      for (const p of map) {
+        const ms = Math.round(p.sec * 1000);
+        const g = groups[groups.length - 1];
+        if (g && g.ms === ms) g.out = p.value;
+        else groups.push({ ms, in: p.value, out: p.value });
+      }
+      const out = [];
+      for (const g of groups) {
+        const isStep = Math.abs(g.in - g.out) > EPS_BPM;
+        if (isStep && withAnchors) {
+          const last = out[out.length - 1];
+          const anchorMs = g.ms - 1;
+          if (anchorMs >= 0 && (!last || last.ms < anchorMs)) out.push({ ms: anchorMs, bpm: g.in, anchor: true });
+        }
+        out.push({ ms: g.ms, bpm: g.out, anchor: false });
+      }
+      // Drop redundant middle points of flat runs (a == b == c); keep anchors and ramp endpoints.
+      return out.filter((p, i, a) => p.anchor || i === 0 || i === a.length - 1
+        || !(a[i - 1].bpm === p.bpm && a[i + 1].bpm === p.bpm));
+    }
+
+    // ---------- Time signatures ----------
+    // Ableton enum: value = (numerator - 1) + 99 * log2(denominator). 201 -> 4/4, 200 -> 3/4, 302 -> 6/8.
+    function decodeTimeSignature(v) {
+      const n = Math.round(v);
+      const num = (n % 99) + 1;
+      const den = 2 ** Math.floor(n / 99);
+      if (n < 0 || den > 64) return { label: `?(${n})`, valid: false };
+      return { label: `${num}/${den}`, valid: true };
+    }
+
+    // ---------- Locators ----------
+    function readLocators(doc) {
+      const liveSet = doc.getElementsByTagName('LiveSet')[0];
+      let locs = kids(path(liveSet, 'Locators/Locators'), 'Locator');
+      if (!locs.length) locs = Array.from(doc.getElementsByTagName('Locator'));
+      return locs.map((l) => ({
+        name: prop(l, 'Name') ?? '',
+        beat: parseFloat(prop(l, 'Time')),
+      })).filter((l) => Number.isFinite(l.beat)).sort((a, b) => a.beat - b.beat);
+    }
+
+    // ---------- Top level ----------
+    function analyze(doc) {
+      if (doc.getElementsByTagName('parsererror').length) throw new Error('The decompressed file is not valid XML.');
+      const root = doc.documentElement;
+      if (!root || root.nodeName !== 'Ableton') throw new Error('This file is not an Ableton Live Set.');
+      const master = findMaster(doc);
+      if (!master) throw new Error('The Live Set has no Master (Main) Track — cannot build a tempo map.');
+
+      const tempo = paramEvents(master, 'Tempo', 'FloatEvent');
+      const map = buildTempoMap(tempo.events);
+
+      const markers = readLocators(doc).map((l) => ({ ...l, ms: beatToAbsoluteTime(map, l.beat) }));
+
+      const sig = paramEvents(master, 'TimeSignature', 'EnumEvent');
+      const sigs = [];
+      for (const e of sig.events.slice().sort((a, b) => a.beat - b.beat)) {
+        const ms = Math.round(beatToAbsoluteTime(map, e.beat));
+        const d = decodeTimeSignature(e.value);
+        const last = sigs[sigs.length - 1];
+        if (last && last.ms === ms) { Object.assign(last, d, { raw: e.value }); continue; }
+        if (last && last.label === d.label) continue;
+        sigs.push({ ms, raw: e.value, ...d });
+      }
+
+      return {
+        creator: root.getAttribute('Creator') || 'Ableton Live',
+        masterTag: master.nodeName,
+        map,
+        tempoSource: tempo.source,
+        sigSource: sig.source,
+        markers,
+        sigs,
+      };
+    }
+
+    const renderMarkers = (r) => r.markers.map((m) => `${m.name} -> ${formatMs(m.ms)}`).join('\n');
+    const renderTempo = (r, anchors) => tempoPoints(r.map, anchors).map((p) => `${p.bpm.toFixed(4)} -> ${formatMs(p.ms)}`).join('\n');
+    const renderSigs = (r) => r.sigs.map((s) => `${s.label} -> ${formatMs(s.ms)}`).join('\n');
+
+    return {
+      decompress, analyze, buildTempoMap, beatToAbsoluteTime, segmentSeconds, tempoPoints,
+      decodeTimeSignature, formatMs, renderMarkers, renderTempo, renderSigs,
+    };
+  })();
+  if (typeof module !== 'undefined') module.exports = ALS;
+  </script>
+
+  <!-- ===================== UI ===================== -->
+  <script>
+  (() => {
+    const $ = (id) => document.getElementById(id);
+    const dropZone = $('dropZone');
+    const fileInput = $('fileInput');
+    const anchorToggle = $('anchorToggle');
+    let result = null;
+
+    function showError(msg) {
+      const box = $('errorBox');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+    function clearError() { $('errorBox').classList.add('hidden'); }
+
+    function clearOutputs() {
+      result = null;
+      for (const id of ['outMarkers', 'outTempo', 'outSig']) $(id).value = '';
+      for (const id of ['countMarkers', 'countTempo', 'countSig']) $(id).textContent = '–';
+      $('summary').classList.add('hidden');
+      $('notes').textContent = '';
+    }
+
+    function renderTempo() {
+      if (!result) return;
+      const text = ALS.renderTempo(result, anchorToggle.checked);
+      $('outTempo').value = text;
+      $('countTempo').textContent = `${text ? text.split('\n').length : 0} points`;
+    }
+
+    function render() {
+      $('outMarkers').value = ALS.renderMarkers(result) || '';
+      $('countMarkers').textContent = `${result.markers.length} locators`;
+      $('outSig').value = ALS.renderSigs(result) || '';
+      $('countSig').textContent = `${result.sigs.length} changes`;
+      renderTempo();
+
+      const bpms = result.map.map((p) => p.value);
+      const lastMs = result.map[result.map.length - 1].sec * 1000;
+      const cells = [
+        ['Created with', result.creator],
+        ['Start tempo', `${result.map[0].value.toFixed(2)} BPM`],
+        ['Tempo range', `${Math.min(...bpms).toFixed(2)}–${Math.max(...bpms).toFixed(2)}`],
+        ['Last tempo event', ALS.formatMs(lastMs)],
+      ];
+      $('summary').innerHTML = cells.map(([k, v]) =>
+        `<div class="bg-live-panel px-4 py-3"><div class="text-[11px] uppercase tracking-wider text-live-dim font-sans">${k}</div><div class="mt-1 truncate"></div></div>`).join('');
+      $('summary').querySelectorAll('.truncate').forEach((el, i) => { el.textContent = cells[i][1]; });
+      $('summary').classList.remove('hidden');
+
+      const notes = [`Tempo source: ${result.tempoSource}`, `time signature source: ${result.sigSource}`, `track tag: <${result.masterTag}>`];
+      const bad = result.sigs.filter((s) => !s.valid);
+      if (bad.length) notes.push(`${bad.length} time signature value(s) could not be decoded (shown as ?(raw))`);
+      $('notes').textContent = notes.join(' · ');
+    }
+
+    async function handleFile(file) {
+      clearError();
+      clearOutputs();
+      if (!file) return;
+      const info = $('fileInfo');
+      info.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+      info.classList.remove('hidden');
+      if (!/\.als$/i.test(file.name)) {
+        showError(`“${file.name}” is not an .als file. Please choose an Ableton Live Set.`);
+        return;
+      }
+      try {
+        const xml = await ALS.decompress(await file.arrayBuffer());
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        result = ALS.analyze(doc);
+        render();
+      } catch (err) {
+        console.error(err);
+        showError(err.message || String(err));
+      }
+    }
+
+    // Drag & drop
+    ['dragenter', 'dragover'].forEach((t) => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.add('drop-active'); }));
+    ['dragleave', 'drop'].forEach((t) => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.remove('drop-active'); }));
+    dropZone.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
+    fileInput.addEventListener('change', () => { handleFile(fileInput.files[0]); fileInput.value = ''; });
+    // Stop the browser from opening a file dropped outside the zone.
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => e.preventDefault());
+
+    anchorToggle.addEventListener('change', renderTempo);
+
+    // Copy buttons, with a fallback for file:// pages where navigator.clipboard may be unavailable.
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+      const label = btn.textContent;
+      btn.addEventListener('click', async () => {
+        const ta = $(btn.dataset.copy);
+        if (!ta.value) return;
+        let ok = false;
+        try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (_) {
+          ta.focus(); ta.select();
+          try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+        }
+        btn.textContent = ok ? 'Copied ✓' : 'Press ⌘/Ctrl+C';
+        if (!ok) { ta.focus(); ta.select(); }
+        setTimeout(() => { btn.textContent = label; }, 1600);
+      });
+    });
+  })();
+  </script>
+</body>
+</html>
