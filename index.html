@@ -39,7 +39,7 @@
   </script>
   <style>
     body { background: #161616; }
-    textarea { scrollbar-color: #3a3a3a #1b1b1b; }
+    .list { scrollbar-color: #3a3a3a #1b1b1b; }
     .drop-active { border-color: #ff764d !important; background: rgba(255,118,77,0.06) !important; }
     .toggle input:checked + span { background: #ff764d; }
     .toggle input:checked + span::after { transform: translateX(16px); background: #161616; }
@@ -102,7 +102,7 @@
            locales. parseOffset accepts "2.5" and "2,5" and anything else is flagged, not guessed. -->
       <label class="flex items-center gap-2" title="Shift every timestamp (text and MIDI). Positive adds pre-roll, negative trims the start. Use 2.5 or 2,5.">
         <span class="text-live-dim uppercase tracking-wider text-xs">Offset</span>
-        <input id="offsetInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="Offset (sec)"
+        <input id="offsetInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.0"
           class="w-28 bg-[#1b1b1b] border border-live-line rounded px-2 py-1.5 font-mono text-sm focus:outline-none focus:border-live-orange" />
         <span class="text-live-dim text-xs">sec</span>
         <span id="offsetError" class="hidden text-xs text-live-red"></span>
@@ -172,48 +172,61 @@
       <!-- Set summary -->
       <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-live-line border border-live-line rounded-md overflow-hidden font-mono text-sm"></div>
 
-      <!-- Output cards -->
+      <!-- Output cards: one row per value to paste into Secuencias. Click a value to copy it, or use
+           "Copy next" to walk through them in order. Copied values get a check mark. -->
       <div id="cards" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col" data-card="markers">
           <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
             <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-orange">&#9632;</span> Markers</h3>
-            <span id="countMarkers" class="font-mono text-xs text-live-dim">&ndash;</span>
+            <span data-count class="font-mono text-xs text-live-dim">&ndash;</span>
           </div>
-          <div class="px-4 py-2 text-xs text-live-dim">Locator name &rarr; absolute time</div>
-          <textarea id="outMarkers" readonly spellcheck="false"
-            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-          <div class="p-4">
-            <button data-copy="outMarkers"
-              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          <div class="px-4 py-2 text-xs text-live-dim flex items-center justify-between gap-3">
+            <span>Click a time to copy &middot; pick the name in the Sections dropdown</span>
+            <span class="shrink-0 font-mono"><span data-progress></span> <button type="button" data-reset class="underline hover:text-live-text ml-1">reset</button></span>
+          </div>
+          <ol data-list class="list flex-1 min-h-[22rem] max-h-[34rem] overflow-y-auto mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] divide-y divide-[#262626]"></ol>
+          <div class="p-4 flex gap-2">
+            <button type="button" data-next
+              class="flex-1 bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy next</button>
+            <button type="button" data-all
+              class="border border-live-orange text-live-orange font-bold uppercase tracking-wider text-xs px-4 rounded hover:bg-live-orange hover:text-[#161616] transition">Copy all</button>
           </div>
         </article>
 
-        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col" data-card="tempo">
           <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
             <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-yellow">&#9632;</span> Tempo Automation</h3>
-            <span id="countTempo" class="font-mono text-xs text-live-dim">&ndash;</span>
+            <span data-count class="font-mono text-xs text-live-dim">&ndash;</span>
           </div>
-          <div class="px-4 py-2 text-xs text-live-dim">BPM &rarr; absolute time</div>
-          <textarea id="outTempo" readonly spellcheck="false"
-            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-          <div class="p-4">
-            <button data-copy="outTempo"
-              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          <div class="px-4 py-2 text-xs text-live-dim flex items-center justify-between gap-3">
+            <span>Click BPM, then time &middot; Tempo Changes tab</span>
+            <span class="shrink-0 font-mono"><span data-progress></span> <button type="button" data-reset class="underline hover:text-live-text ml-1">reset</button></span>
+          </div>
+          <ol data-list class="list flex-1 min-h-[22rem] max-h-[34rem] overflow-y-auto mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] divide-y divide-[#262626]"></ol>
+          <div class="p-4 flex gap-2">
+            <button type="button" data-next
+              class="flex-1 bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy next</button>
+            <button type="button" data-all
+              class="border border-live-orange text-live-orange font-bold uppercase tracking-wider text-xs px-4 rounded hover:bg-live-orange hover:text-[#161616] transition">Copy all</button>
           </div>
         </article>
 
-        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col" data-card="sigs">
           <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
             <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-blue">&#9632;</span> Time Signatures</h3>
-            <span id="countSig" class="font-mono text-xs text-live-dim">&ndash;</span>
+            <span data-count class="font-mono text-xs text-live-dim">&ndash;</span>
           </div>
-          <div class="px-4 py-2 text-xs text-live-dim">Signature &rarr; absolute time</div>
-          <textarea id="outSig" readonly spellcheck="false"
-            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-          <div class="p-4">
-            <button data-copy="outSig"
-              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          <div class="px-4 py-2 text-xs text-live-dim flex items-center justify-between gap-3">
+            <span>Click a time to copy &middot; pick the signature in the dropdown</span>
+            <span class="shrink-0 font-mono"><span data-progress></span> <button type="button" data-reset class="underline hover:text-live-text ml-1">reset</button></span>
+          </div>
+          <ol data-list class="list flex-1 min-h-[22rem] max-h-[34rem] overflow-y-auto mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] divide-y divide-[#262626]"></ol>
+          <div class="p-4 flex gap-2">
+            <button type="button" data-next
+              class="flex-1 bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy next</button>
+            <button type="button" data-all
+              class="border border-live-orange text-live-orange font-bold uppercase tracking-wider text-xs px-4 rounded hover:bg-live-orange hover:text-[#161616] transition">Copy all</button>
           </div>
         </article>
 
@@ -644,19 +657,24 @@
     // Line breaks inside a locator name would split one marker across lines; flatten them to spaces.
     const cleanName = (name) => name.replace(/[\r\n]+/g, ' ');
 
-    function renderMarkers(r, o) {
+    // Display-ready rows: the copy-one-by-one lists and the "name -> time" text are both built from these.
+    function markerItems(r, o) {
       o = withDefaults(o);
-      return markerRows(r, o).rows.map((m) => `${cleanName(m.name)} -> ${formatTime(m.ms, o.format)}`).join('\n');
+      return markerRows(r, o).rows.map((m) => ({ label: cleanName(m.name), time: formatTime(m.ms, o.format) }));
     }
-    function renderTempo(r, o) {
+    function tempoItems(r, o) {
       o = withDefaults(o);
       return tempoPoints(o.smoothRamps ? smoothRamps(r.map) : r.map, o.anchors, Math.round(o.offsetMs))
-        .map((p) => `${p.bpm.toFixed(4)} -> ${formatTime(p.ms, o.format)}`).join('\n');
+        .map((p) => ({ bpm: p.bpm.toFixed(4), time: formatTime(p.ms, o.format), anchor: p.anchor }));
     }
-    function renderSigs(r, o) {
+    function sigItems(r, o) {
       o = withDefaults(o);
-      return sigRows(r, o).map((s) => `${s.label} -> ${formatTime(s.ms, o.format)}`).join('\n');
+      return sigRows(r, o).map((s) => ({ label: s.label, time: formatTime(s.ms, o.format) }));
     }
+
+    const renderMarkers = (r, o) => markerItems(r, o).map((m) => `${m.label} -> ${m.time}`).join('\n');
+    const renderTempo = (r, o) => tempoItems(r, o).map((p) => `${p.bpm} -> ${p.time}`).join('\n');
+    const renderSigs = (r, o) => sigItems(r, o).map((s) => `${s.label} -> ${s.time}`).join('\n');
 
     // ---------- Session linter ----------
     // Section names Secuencias.com users commonly expect. Numbered/lettered variants ("Verse 2",
@@ -969,7 +987,7 @@
     return {
       SUPPORTED, SECTION_NAMES, PPQ, detectVersion, decompress, analyze, buildTempoMap, beatToAbsoluteTime,
       absoluteTimeToBeat, segmentSeconds, smoothRamps, tempoPoints, decodeTimeSignature, formatMs, formatSmpte, formatTime,
-      markerRows, sigRows, renderMarkers, renderTempo, renderSigs, isStandardName, suggestName, lint,
+      markerRows, sigRows, markerItems, tempoItems, sigItems, renderMarkers, renderTempo, renderSigs, isStandardName, suggestName, lint,
       formatOffset, parseOffset, buildMidi, songName, safeFileName, uniqueNames, buildSummary, buildZip,
     };
   })();
@@ -1064,9 +1082,108 @@
       }));
     }
 
-    function setLines(id, countId, text, unit) {
-      $(id).value = text;
-      $(countId).textContent = `${text ? text.split('\n').length : 0} ${unit}`;
+    // ---------- Copy lists ----------
+    // One row per entry to re-type in Secuencias. There the section name and time signature are
+    // dropdowns, so only times (and the BPM for tempo) are pasted; "Copy next" walks those values in
+    // order. Copied values are remembered per song as card|row|cell|text, so a check mark disappears
+    // by itself when the value changes (offset, time format, options).
+    const CARDS = {
+      markers: {
+        unit: 'locators', items: (r) => ALS.markerItems(r, opts), all: (r) => ALS.renderMarkers(r, opts),
+        cells: (it) => [{ text: it.label, role: 'name' }, { text: it.time, role: 'value' }],
+      },
+      tempo: {
+        unit: 'points', items: (r) => ALS.tempoItems(r, opts), all: (r) => ALS.renderTempo(r, opts),
+        cells: (it) => [{ text: it.bpm, role: 'value', suffix: ' BPM' }, { text: it.time, role: 'value' }],
+      },
+      sigs: {
+        unit: 'changes', items: (r) => ALS.sigItems(r, opts), all: (r) => ALS.renderSigs(r, opts),
+        cells: (it) => [{ text: it.label, role: 'name' }, { text: it.time, role: 'value' }],
+      },
+    };
+    const cellKey = (card, i, c, text) => `${card}|${i}|${c}|${text}`;
+
+    // The values "Copy next" walks through, in order.
+    function sequence(card, items) {
+      const seq = [];
+      items.forEach((it, i) => CARDS[card].cells(it).forEach((cell, c) => {
+        if (cell.role === 'value') seq.push({ i, c, text: cell.text, key: cellKey(card, i, c, cell.text) });
+      }));
+      return seq;
+    }
+
+    function renderCard(card, s) {
+      const el = document.querySelector(`[data-card="${card}"]`);
+      const items = CARDS[card].items(s.result);
+      const seq = sequence(card, items);
+      const next = seq.find((x) => !s.done.has(x.key));
+      el.querySelector('[data-count]').textContent = `${items.length} ${CARDS[card].unit}`;
+      el.querySelector('[data-progress]').textContent = `${seq.filter((x) => s.done.has(x.key)).length}/${seq.length} copied`;
+      const nextBtn = el.querySelector('[data-next]');
+      nextBtn.disabled = !next;
+      nextBtn.classList.toggle('opacity-40', !next);
+      el.querySelector('[data-list]').replaceChildren(...items.map((it, i) => {
+        const li = document.createElement('li');
+        li.className = 'flex items-center gap-2 px-2 py-1';
+        const num = document.createElement('span');
+        num.className = 'w-6 shrink-0 text-right text-[11px] text-live-dim';
+        num.textContent = i + 1;
+        li.append(num);
+        const cells = CARDS[card].cells(it);
+        cells.forEach((cell, c) => {
+          const key = cellKey(card, i, c, cell.text);
+          const done = s.done.has(key);
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.dataset.copyCell = '';
+          b.dataset.i = i;
+          b.dataset.c = c;
+          b.title = `Copy "${cell.text}"`;
+          b.className = cell.role === 'name'
+            ? `flex-1 min-w-0 truncate text-left px-1.5 py-1 rounded font-sans text-sm hover:bg-live-raised ${done ? 'text-live-green' : 'text-live-text'}`
+            : `shrink-0 px-2 py-1 rounded border hover:bg-live-raised ${next?.key === key ? 'border-live-orange text-live-orange'
+              : done ? 'border-transparent text-live-green' : 'border-live-line text-live-text'}`;
+          b.textContent = `${done ? '✓ ' : ''}${cell.text.trim() ? cell.text : '(blank)'}${cell.suffix || ''}`;
+          li.append(b);
+        });
+        if (!cells.some((cell) => cell.role === 'name')) li.append(Object.assign(document.createElement('span'), { className: 'flex-1' }));
+        if (it.anchor) {
+          li.append(Object.assign(document.createElement('span'), {
+            className: 'shrink-0 text-[10px] uppercase tracking-wider text-live-dim', textContent: 'anchor',
+            title: 'Holds the previous BPM 1 ms before the change, so Secuencias jumps instead of ramping',
+          }));
+        }
+        return li;
+      }));
+      return next;
+    }
+
+    function renderCards(s) {
+      for (const card of Object.keys(CARDS)) renderCard(card, s);
+    }
+
+    // Clipboard, with a fallback for file:// pages where navigator.clipboard may be unavailable.
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) {
+        const ta = Object.assign(document.createElement('textarea'), { value: text, readOnly: true });
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.append(ta);
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+        ta.remove();
+        return ok;
+      }
+    }
+
+    function flash(btn, text) {
+      btn.dataset.label ??= btn.textContent;
+      btn.textContent = text;
+      clearTimeout(btn._flash);
+      btn._flash = setTimeout(() => { btn.textContent = btn.dataset.label; }, 1400);
     }
 
     function renderSong() {
@@ -1086,9 +1203,7 @@
 
       const r = s.result;
       renderHealth(ALS.lint(r, opts));
-      setLines('outMarkers', 'countMarkers', ALS.renderMarkers(r, opts), 'locators');
-      setLines('outTempo', 'countTempo', ALS.renderTempo(r, opts), 'points');
-      setLines('outSig', 'countSig', ALS.renderSigs(r, opts), 'changes');
+      renderCards(s);
 
       // Same points as the Tempo card (offset included), not the raw map: the raw map's first entry can
       // be Ableton's placeholder value, and a trimmed start can begin mid-song at a different tempo.
@@ -1140,7 +1255,7 @@
       if (!files.length) return;
       const gen = ++generation;
       showError('');
-      songs = files.map((f) => ({ name: ALS.songName(f.name), fileName: f.name, size: f.size, pending: true }));
+      songs = files.map((f) => ({ name: ALS.songName(f.name), fileName: f.name, size: f.size, pending: true, done: new Set() }));
       active = 0;
       const info = $('fileInfo');
       info.textContent = files.length === 1 ? `${files[0].name} · ${(files[0].size / 1024).toFixed(1)} KB` : `${files.length} files`;
@@ -1235,21 +1350,37 @@
       }
     });
 
-    // Copy buttons, with a fallback for file:// pages where navigator.clipboard may be unavailable.
-    document.querySelectorAll('.copy-btn').forEach((btn) => {
-      const label = btn.textContent;
-      btn.addEventListener('click', async () => {
-        const ta = $(btn.dataset.copy);
-        if (!ta.value) return;
-        let ok = false;
-        try { await navigator.clipboard.writeText(ta.value); ok = true; } catch (_) {
-          ta.focus(); ta.select();
-          try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
-        }
-        btn.textContent = ok ? 'Copied ✓' : 'Press ⌘/Ctrl+C';
-        if (!ok) { ta.focus(); ta.select(); }
-        setTimeout(() => { btn.textContent = label; }, 1600);
-      });
+    // Clicks inside the cards: one value, "Copy next", "Copy all", reset.
+    $('cards').addEventListener('click', async (e) => {
+      const btn = e.target.closest('button');
+      const cardEl = e.target.closest('[data-card]');
+      const s = songs[active];
+      if (!btn || !cardEl || !s?.result) return;
+      const card = cardEl.dataset.card;
+      const items = CARDS[card].items(s.result);
+
+      if (btn.hasAttribute('data-copy-cell')) {
+        const i = Number(btn.dataset.i), c = Number(btn.dataset.c);
+        const cell = CARDS[card].cells(items[i])[c];
+        if (await copyText(cell.text)) s.done.add(cellKey(card, i, c, cell.text));
+        else showError('Could not copy to the clipboard. Select the value and press ⌘/Ctrl+C.');
+        renderCard(card, s);
+      } else if (btn.hasAttribute('data-next')) {
+        const next = sequence(card, items).find((x) => !s.done.has(x.key));
+        if (!next) return;
+        const ok = await copyText(next.text);
+        if (ok) s.done.add(next.key);
+        const upcoming = renderCard(card, s);
+        flash(btn, ok ? `Copied ${next.text}` : 'Copy failed');
+        // Keep the row that will be copied next in view.
+        if (upcoming) cardEl.querySelector(`[data-list] li:nth-child(${upcoming.i + 1})`)?.scrollIntoView({ block: 'nearest' });
+      } else if (btn.hasAttribute('data-all')) {
+        flash(btn, (await copyText(CARDS[card].all(s.result))) ? 'Copied ✓' : 'Copy failed');
+      } else if (btn.hasAttribute('data-reset')) {
+        for (const key of [...s.done]) if (key.startsWith(`${card}|`)) s.done.delete(key);
+        renderCard(card, s);
+        cardEl.querySelector('[data-list]').scrollTop = 0;
+      }
     });
   })();
   </script>
