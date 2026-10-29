@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -28,6 +30,7 @@
               yellow: '#ffd23f',
               green: '#7ad46b',
               blue: '#6fa8ff',
+              red: '#ff5c5c',
             },
           },
         },
@@ -44,6 +47,9 @@
       content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
       border-radius: 2px; background: #8c8c8c; transition: transform .15s ease;
     }
+    .seg button[aria-pressed="true"] { background: #ff764d; color: #161616; }
+    .tab[aria-selected="true"] { background: #222222; border-color: #3a3a3a; border-bottom-color: #222222; color: #e6e6e6; }
+    input[type=number]::-webkit-inner-spin-button { opacity: .5; }
   </style>
 </head>
 <body class="min-h-screen text-live-text font-sans antialiased">
@@ -61,13 +67,13 @@
             <rect x="18" y="0" width="3" height="20" fill="#e6e6e6"/>
             <rect x="24" y="16" width="4" height="4" fill="#ff764d"/>
           </svg>
-          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">ALS Extractor</h1>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">ALS Extractor <span class="text-live-orange text-base align-top font-mono">PRO</span></h1>
         </div>
-        <p class="mt-1 text-live-dim text-sm">Ableton Live Set &rarr; Secuencias.com markers, tempo map &amp; time signatures</p>
+        <p class="mt-1 text-live-dim text-sm">Ableton Live Set &rarr; Secuencias.com markers, tempo map, time signatures &amp; MIDI</p>
       </div>
       <div class="flex items-center gap-2 text-xs text-live-dim font-mono">
         <span class="inline-block w-2 h-2 rounded-full bg-live-green"></span>
-        100% client-side &middot; your file never leaves this browser
+        100% client-side &middot; your files never leave this browser
       </div>
     </div>
   </header>
@@ -77,73 +83,144 @@
     <!-- Drop zone -->
     <label id="dropZone" for="fileInput"
       class="block cursor-pointer border-2 border-dashed border-live-line bg-live-panel rounded-md px-6 py-10 text-center transition-colors hover:border-live-dim">
-      <input id="fileInput" type="file" accept=".als" class="sr-only" />
-      <div class="text-lg font-medium">Drop your <span class="font-mono text-live-orange">.als</span> file here</div>
-      <div class="mt-1 text-sm text-live-dim">or click to browse</div>
+      <input id="fileInput" type="file" accept=".als" multiple class="sr-only" />
+      <div class="text-lg font-medium">Drop one or more <span class="font-mono text-live-orange">.als</span> files here</div>
+      <div class="mt-1 text-sm text-live-dim">or click to browse &middot; drop a whole setlist at once</div>
+      <div class="mt-4 inline-flex flex-wrap justify-center items-center gap-x-2 gap-y-1 text-xs font-mono text-live-dim border border-live-line rounded px-3 py-1.5">
+        <span class="text-live-text">Supported:</span> Ableton Live 8 – 12 (Suite, Standard, Intro, Lite)
+        <span class="text-live-line">|</span> Newer versions load with a notice
+      </div>
       <div id="fileInfo" class="mt-4 font-mono text-xs text-live-dim hidden"></div>
     </label>
 
-    <!-- Error banner -->
-    <div id="errorBox" role="alert" class="hidden border border-red-500/60 bg-red-500/10 text-red-200 rounded-md px-4 py-3 text-sm"></div>
+    <!-- Error banner (batch-level problems) -->
+    <div id="errorBox" role="alert" class="hidden border border-live-red/60 bg-live-red/10 text-red-200 rounded-md px-4 py-3 text-sm"></div>
 
-    <!-- Set summary -->
-    <div id="summary" class="hidden grid grid-cols-2 sm:grid-cols-4 gap-px bg-live-line border border-live-line rounded-md overflow-hidden font-mono text-sm"></div>
+    <!-- Toolbar: global options for every song -->
+    <section id="toolbar" class="hidden bg-live-panel border border-live-line rounded-md px-4 py-3 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+      <!-- Text, not type=number: number inputs silently turn "2e" into "" and "2,5" into 25 on some
+           locales. parseOffset accepts "2.5" and "2,5" and anything else is flagged, not guessed. -->
+      <label class="flex items-center gap-2" title="Shift every timestamp (text and MIDI). Positive adds pre-roll, negative trims the start. Use 2.5 or 2,5.">
+        <span class="text-live-dim uppercase tracking-wider text-xs">Offset</span>
+        <input id="offsetInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="Offset (sec)"
+          class="w-28 bg-[#1b1b1b] border border-live-line rounded px-2 py-1.5 font-mono text-sm focus:outline-none focus:border-live-orange" />
+        <span class="text-live-dim text-xs">sec</span>
+        <span id="offsetError" class="hidden text-xs text-live-red"></span>
+      </label>
 
-    <!-- Output cards -->
-    <section class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="flex items-center gap-2">
+        <span class="text-live-dim uppercase tracking-wider text-xs">Time</span>
+        <div class="seg inline-flex border border-live-line rounded overflow-hidden font-mono text-xs" role="group" aria-label="Time format">
+          <button type="button" data-format="ms" aria-pressed="true" class="px-3 py-1.5">MM:SS:mmm</button>
+          <button type="button" data-format="smpte" aria-pressed="false" class="px-3 py-1.5 border-l border-live-line">SMPTE (30fps)</button>
+        </div>
+      </div>
 
-      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
-          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-orange">&#9632;</span> Markers</h2>
-          <span id="countMarkers" class="font-mono text-xs text-live-dim">&ndash;</span>
-        </div>
-        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center">Locator name &rarr; absolute time</div>
-        <textarea id="outMarkers" readonly spellcheck="false"
-          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-        <div class="p-4">
-          <button data-copy="outMarkers"
-            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
-        </div>
-      </article>
+      <label class="toggle flex items-center gap-2 cursor-pointer select-none" title="Insert a point 1 ms before each stepped tempo change, holding the previous BPM, so Secuencias jumps instead of ramping">
+        <span class="text-live-dim uppercase tracking-wider text-xs">Anchor points</span>
+        <input id="anchorToggle" type="checkbox" class="sr-only" autocomplete="off" checked />
+        <span class="relative inline-block w-9 h-5 rounded-sm bg-live-raised border border-live-line"></span>
+      </label>
 
-      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
-          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-yellow">&#9632;</span> Tempo Automation</h2>
-          <span id="countTempo" class="font-mono text-xs text-live-dim">&ndash;</span>
-        </div>
-        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center justify-between gap-3">
-          <span>BPM &rarr; absolute time</span>
-          <label class="toggle flex items-center gap-2 cursor-pointer select-none" title="Insert a point 1 ms before each stepped tempo change, holding the previous BPM, so Secuencias jumps instead of ramping">
-            <span class="text-live-text">Anchor points</span>
-            <input id="anchorToggle" type="checkbox" class="sr-only" checked />
-            <span class="relative inline-block w-9 h-5 rounded-sm bg-live-raised border border-live-line"></span>
-          </label>
-        </div>
-        <textarea id="outTempo" readonly spellcheck="false"
-          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-        <div class="p-4">
-          <button data-copy="outTempo"
-            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
-        </div>
-      </article>
+      <label class="toggle flex items-center gap-2 cursor-pointer select-none" title="Add tempo points inside tempo ramps so Secuencias follows Ableton's slowdown/speed-up curve (click grid within 0.5 ms per ramp; with many ramps the small errors add up, about 0.35 ms each). Off = only the ramp's start and end points.">
+        <span class="text-live-dim uppercase tracking-wider text-xs">Smooth ramps</span>
+        <input id="smoothToggle" type="checkbox" class="sr-only" autocomplete="off" checked />
+        <span class="relative inline-block w-9 h-5 rounded-sm bg-live-raised border border-live-line"></span>
+      </label>
 
-      <article class="bg-live-panel border border-live-line rounded-md flex flex-col">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
-          <h2 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-blue">&#9632;</span> Time Signatures</h2>
-          <span id="countSig" class="font-mono text-xs text-live-dim">&ndash;</span>
-        </div>
-        <div class="px-4 py-2 text-xs text-live-dim h-10 flex items-center">Signature &rarr; absolute time</div>
-        <textarea id="outSig" readonly spellcheck="false"
-          class="flex-1 min-h-[22rem] mx-4 bg-[#1b1b1b] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
-        <div class="p-4">
-          <button data-copy="outSig"
-            class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
-        </div>
-      </article>
+      <label class="toggle flex items-center gap-2 cursor-pointer select-none" title="Leave locators with a blank name out of the markers text and the MIDI export">
+        <span class="text-live-dim uppercase tracking-wider text-xs">Skip blank locators</span>
+        <input id="blankToggle" type="checkbox" class="sr-only" autocomplete="off" checked />
+        <span class="relative inline-block w-9 h-5 rounded-sm bg-live-raised border border-live-line"></span>
+      </label>
 
+      <button id="zipBtn" type="button"
+        class="ml-auto border border-live-orange text-live-orange font-bold uppercase tracking-wider text-xs px-4 py-2 rounded hover:bg-live-orange hover:text-[#161616] transition">Download All (ZIP)</button>
+
+      <p id="smpteNotice" class="hidden basis-full text-xs text-live-yellow">
+        SMPTE view is for reading only: anchor points 1 ms apart fall in the same frame. Switch back to MM:SS:mmm before copying into Secuencias. MIDI and ZIP exports are not affected.
+      </p>
     </section>
 
-    <p id="notes" class="text-xs text-live-dim font-mono"></p>
+    <!-- Song tabs -->
+    <nav id="tabs" role="tablist" class="hidden flex gap-1 overflow-x-auto border-b border-live-line -mb-6"></nav>
+
+    <!-- Active song -->
+    <section id="songPanel" class="hidden bg-live-panel border border-live-line border-t-0 rounded-b-md p-4 sm:p-5 space-y-5">
+
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="min-w-0">
+          <h2 id="songTitle" class="text-xl font-bold truncate"></h2>
+          <p id="songMeta" class="text-xs text-live-dim font-mono"></p>
+        </div>
+        <button id="midiBtn" type="button"
+          class="bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm px-6 py-3 rounded hover:brightness-110 active:brightness-95 transition">&#9835; Export MIDI</button>
+      </div>
+
+      <!-- Song-level error (file could not be parsed) -->
+      <div id="songError" role="alert" class="hidden border border-live-red/60 bg-live-red/10 text-red-200 rounded-md px-4 py-3 text-sm"></div>
+
+      <!-- Session health -->
+      <div id="healthPanel" class="border border-live-line rounded-md">
+        <div class="flex items-center justify-between px-4 py-2.5 border-b border-live-line">
+          <h3 class="font-bold tracking-wide uppercase text-sm">Session Health</h3>
+          <span id="healthCount" class="font-mono text-xs text-live-dim"></span>
+        </div>
+        <ul id="healthList" class="divide-y divide-live-line text-sm"></ul>
+      </div>
+
+      <!-- Set summary -->
+      <div id="summary" class="grid grid-cols-2 sm:grid-cols-4 gap-px bg-live-line border border-live-line rounded-md overflow-hidden font-mono text-sm"></div>
+
+      <!-- Output cards -->
+      <div id="cards" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+            <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-orange">&#9632;</span> Markers</h3>
+            <span id="countMarkers" class="font-mono text-xs text-live-dim">&ndash;</span>
+          </div>
+          <div class="px-4 py-2 text-xs text-live-dim">Locator name &rarr; absolute time</div>
+          <textarea id="outMarkers" readonly spellcheck="false"
+            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+          <div class="p-4">
+            <button data-copy="outMarkers"
+              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          </div>
+        </article>
+
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+            <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-yellow">&#9632;</span> Tempo Automation</h3>
+            <span id="countTempo" class="font-mono text-xs text-live-dim">&ndash;</span>
+          </div>
+          <div class="px-4 py-2 text-xs text-live-dim">BPM &rarr; absolute time</div>
+          <textarea id="outTempo" readonly spellcheck="false"
+            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+          <div class="p-4">
+            <button data-copy="outTempo"
+              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          </div>
+        </article>
+
+        <article class="bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+          <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+            <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-blue">&#9632;</span> Time Signatures</h3>
+            <span id="countSig" class="font-mono text-xs text-live-dim">&ndash;</span>
+          </div>
+          <div class="px-4 py-2 text-xs text-live-dim">Signature &rarr; absolute time</div>
+          <textarea id="outSig" readonly spellcheck="false"
+            class="flex-1 min-h-[22rem] mx-4 bg-[#161616] border border-live-line rounded font-mono text-[13px] leading-6 p-3 text-live-text resize-y focus:outline-none focus:border-live-orange"></textarea>
+          <div class="p-4">
+            <button data-copy="outSig"
+              class="copy-btn w-full bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy to Clipboard</button>
+          </div>
+        </article>
+
+      </div>
+
+      <p id="notes" class="text-xs text-live-dim font-mono"></p>
+    </section>
   </main>
 
   <!-- ===================== Core logic (DOM-agnostic, testable) ===================== -->
@@ -152,6 +229,11 @@
     const EPS_BPM = 1e-9;
     // Ableton stores the initial automation value at a huge negative beat (about -63072000).
     const clampBeat = (b) => (b < 0 ? 0 : b);
+
+    // Global output options. offsetMs is applied only when rendering/exporting, never to the tempo map itself.
+    // smoothRamps adds tempo points inside ramps; skipBlank leaves blank-named locators out of every output.
+    const DEFAULT_OPTS = { anchors: true, offsetMs: 0, format: 'ms', smoothRamps: true, skipBlank: true };
+    const withDefaults = (o) => ({ ...DEFAULT_OPTS, ...(o || {}) });
 
     // ---------- Decompression ----------
     const PAKO_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';
@@ -185,15 +267,26 @@
           const out = await new Response(stream).arrayBuffer();
           return new TextDecoder('utf-8').decode(out);
         } catch (e) {
-          throw new Error('Decompression failed — the file may be corrupted or not a valid .als.');
+          console.warn('Native gzip decompression failed, trying pako:', e);
         }
       }
-      if (typeof pako === 'undefined') await loadScript(PAKO_URL);
-      try {
-        return pako.inflate(bytes, { to: 'string' });
-      } catch (e) {
-        throw new Error('Decompression failed — the file may be corrupted or not a valid .als.');
+      if (typeof pako === 'undefined') {
+        try {
+          await loadScript(PAKO_URL);
+        } catch (e) {
+          throw new Error('Decompression failed — the file may be corrupted, and the fallback decompressor could not be loaded (offline?) to try again.');
+        }
       }
+      let text;
+      try {
+        text = pako.inflate(bytes, { to: 'string' });
+      } catch (e) {
+        console.error('pako decompression failed:', e);
+        throw new Error(`Decompression failed — the file may be corrupted or not a valid .als (${e.message || e}).`);
+      }
+      // pako returns undefined (no throw) on a truncated stream, e.g. an interrupted download.
+      if (typeof text !== 'string') throw new Error('Decompression failed — the file is incomplete or corrupted (interrupted download?).');
+      return text;
     }
 
     // ---------- XML helpers (element-children only, no :scope selectors) ----------
@@ -222,19 +315,31 @@
       if (!liveSet) return null;
       // Live 12 renamed the Master track to "Main"; older sets use MasterTrack.
       return child(liveSet, 'MasterTrack') || child(liveSet, 'MainTrack')
-        || doc.getElementsByTagName('MasterTrack')[0] || doc.getElementsByTagName('MainTrack')[0] || null;
+        // Future renames: any top-level *Track (outside <Tracks>) whose Mixer owns the song Tempo.
+        || kids(liveSet).find((t) => /Track$/.test(t.nodeName) && t.nodeName !== 'PreHearTrack'
+          && (path(t, 'DeviceChain/Mixer/Tempo') || path(t, 'MasterChain/Mixer/Tempo') || path(t, 'Mixer/Tempo')))
+        || null;
     }
+
+    const PLAIN_EVENT_ATTRS = new Set(['Id', 'Time', 'Value']);
 
     function readEvents(eventsEl, tag) {
       return kids(eventsEl, tag).map((e) => ({
         beat: clampBeat(parseFloat(e.getAttribute('Time'))),
         value: parseFloat(e.getAttribute('Value')),
+        // Live 11+ stores curved segments as extra attributes on the event (e.g. curve controls).
+        curved: Array.from(e.attributes).some((a) => !PLAIN_EVENT_ATTRS.has(a.name)),
       })).filter((e) => Number.isFinite(e.beat) && Number.isFinite(e.value));
     }
 
     // Returns { events, source } for a Mixer parameter (Tempo / TimeSignature) of the master track.
     function paramEvents(master, paramName, eventTag) {
-      const param = path(master, 'DeviceChain/Mixer/' + paramName) || master.getElementsByTagName(paramName)[0];
+      // Live 9+: Track/DeviceChain/Mixer. Live 8: MasterTrack/MasterChain/Mixer. Only accept the parameter
+      // as a direct child of the track's Mixer, never a same-named device param.
+      const param = path(master, 'DeviceChain/Mixer/' + paramName)
+        || path(master, 'MasterChain/Mixer/' + paramName)
+        || path(master, 'Mixer/' + paramName)
+        || child(master.getElementsByTagName('Mixer')[0], paramName);
       if (!param) return { events: [], source: 'missing' };
 
       // 1) Modern layout (Live 9+): envelope linked via AutomationTarget Id -> PointeeId.
@@ -279,21 +384,43 @@
       return pts;
     }
 
-    function beatToAbsoluteTime(map, beat) {
-      beat = clampBeat(beat);
-      // Last point with beat <= target (binary search).
+    // Index of the last map point whose `key` (beat or sec) is <= x.
+    function lastAtOrBefore(map, key, x) {
       let lo = 0, hi = map.length - 1;
       while (lo < hi) {
         const mid = (lo + hi + 1) >> 1;
-        if (map[mid].beat <= beat) lo = mid; else hi = mid - 1;
+        if (map[mid][key] <= x) lo = mid; else hi = mid - 1;
       }
-      const p = map[lo];
-      const next = map[lo + 1];
-      if (!next) return (p.sec + (beat - p.beat) * 60 / p.value) * 1000; // hold last BPM forever
-      const frac = (beat - p.beat) / (next.beat - p.beat);
-      const bpmAtBeat = p.value + (next.value - p.value) * frac;
-      return (p.sec + segmentSeconds(beat - p.beat, p.value, bpmAtBeat)) * 1000;
+      return lo;
     }
+
+    function bpmAtBeat(map, beat) {
+      const i = lastAtOrBefore(map, 'beat', clampBeat(beat));
+      const p = map[i], next = map[i + 1];
+      if (!next) return p.value;
+      return p.value + (next.value - p.value) * (clampBeat(beat) - p.beat) / (next.beat - p.beat);
+    }
+
+    function beatToAbsoluteTime(map, beat) {
+      beat = clampBeat(beat);
+      const i = lastAtOrBefore(map, 'beat', beat);
+      const p = map[i];
+      if (!map[i + 1]) return (p.sec + (beat - p.beat) * 60 / p.value) * 1000; // hold last BPM forever
+      return (p.sec + segmentSeconds(beat - p.beat, p.value, bpmAtBeat(map, beat))) * 1000;
+    }
+
+    // Inverse of beatToAbsoluteTime (seconds in, beats out). On a ramp v(b) = v0 + k·b, elapsed
+    // time is t = (60/k)·ln(v/v0), so v = v0·e^(k·t/60) and b = (v − v0)/k.
+    function absoluteTimeToBeat(map, sec) {
+      if (sec <= 0) return 0;
+      const i = lastAtOrBefore(map, 'sec', sec);
+      const p = map[i], n = map[i + 1], dt = sec - p.sec;
+      if (!n || Math.abs(n.value - p.value) < EPS_BPM) return p.beat + dt * p.value / 60;
+      const k = (n.value - p.value) / (n.beat - p.beat);
+      return p.beat + (p.value * Math.exp(k * dt / 60) - p.value) / k;
+    }
+
+    const bpmAtSec = (map, sec) => bpmAtBeat(map, absoluteTimeToBeat(map, sec));
 
     // ---------- Formatting ----------
     function formatMs(ms) {
@@ -304,26 +431,87 @@
       return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}:${String(f).padStart(3, '0')}`;
     }
 
+    // SMPTE HH:MM:SS:FF at 30 fps non-drop. Frames from integer ms avoid float drift at frame edges.
+    function formatSmpte(ms) {
+      const t = Math.max(0, Math.round(ms));
+      const h = Math.floor(t / 3600000);
+      const m = Math.floor(t / 60000) % 60;
+      const s = Math.floor(t / 1000) % 60;
+      const f = Math.floor((t % 1000) * 30 / 1000);
+      return [h, m, s, f].map((x) => String(x).padStart(2, '0')).join(':');
+    }
+
+    const formatTime = (ms, format) => (format === 'smpte' ? formatSmpte(ms) : formatMs(ms));
+
+    // ---------- Ramp smoothing ----------
+    // Ableton ramps BPM linearly per beat; Secuencias is assumed to interpolate linearly per second.
+    // Over one ramp the two curves count slightly different numbers of beats, which leaves the click
+    // grid offset after the ramp. Splitting the ramp into n equal-beat pieces (n = 1, 2, 4, …) shrinks
+    // that offset roughly by n²; stop once it is under SMOOTH_TOLERANCE_MS or pieces reach a 16th note.
+    // The tolerance is per ramp: the residual always has the same sign (Secuencias counts slightly more
+    // beats), so across many ramps it adds up (~0.35 ms per ramp). Added points lie exactly on Ableton's
+    // curve, so they are harmless whatever Secuencias does.
+    const SMOOTH_TOLERANCE_MS = 0.5;
+    const SMOOTH_MIN_BEATS = 0.25;
+
+    function rampPieces(p, n) {
+      const db = n.beat - p.beat;
+      for (let pieces = 1; ; pieces *= 2) {
+        let driftBeats = 0;
+        for (let j = 0; j < pieces; j++) {
+          const v0 = p.value + (n.value - p.value) * j / pieces;
+          const v1 = p.value + (n.value - p.value) * (j + 1) / pieces;
+          const dt = segmentSeconds(db / pieces, v0, v1);
+          driftBeats += (v0 + v1) / 2 * dt / 60 - db / pieces;
+        }
+        const driftMs = Math.abs(driftBeats) * 60 / n.value * 1000;
+        if (driftMs < SMOOTH_TOLERANCE_MS || db / (pieces * 2) < SMOOTH_MIN_BEATS) return pieces;
+      }
+    }
+
+    function smoothRamps(map) {
+      const out = [map[0]];
+      for (let i = 1; i < map.length; i++) {
+        const p = map[i - 1], n = map[i];
+        if (n.beat > p.beat && Math.abs(n.value - p.value) > EPS_BPM) {
+          const pieces = rampPieces(p, n);
+          for (let j = 1; j < pieces; j++) {
+            const beat = p.beat + (n.beat - p.beat) * j / pieces;
+            const value = p.value + (n.value - p.value) * j / pieces;
+            out.push({ beat, value, sec: p.sec + segmentSeconds(beat - p.beat, p.value, value) });
+          }
+        }
+        out.push(n);
+      }
+      return out;
+    }
+
     // ---------- Secuencias tempo output ----------
     // Groups points that land on the same millisecond; a group whose incoming and outgoing BPM differ is a step.
-    function tempoPoints(map, withAnchors) {
+    function tempoPoints(map, withAnchors, offsetMs = 0) {
       const groups = [];
       for (const p of map) {
-        const ms = Math.round(p.sec * 1000);
+        const ms = Math.round(p.sec * 1000 + offsetMs);
         const g = groups[groups.length - 1];
         if (g && g.ms === ms) g.out = p.value;
         else groups.push({ ms, in: p.value, out: p.value });
       }
-      const out = [];
+      let out = [];
       for (const g of groups) {
-        const isStep = Math.abs(g.in - g.out) > EPS_BPM;
+        // A "step" at Ableton time 0 is the initial placeholder being overridden: its incoming BPM never
+        // plays, so it gets no anchor (otherwise a pre-roll would expose it at offset − 1 ms).
+        const isStep = g.ms - offsetMs > 0 && Math.abs(g.in - g.out) > EPS_BPM;
         if (isStep && withAnchors) {
           const last = out[out.length - 1];
           const anchorMs = g.ms - 1;
-          if (anchorMs >= 0 && (!last || last.ms < anchorMs)) out.push({ ms: anchorMs, bpm: g.in, anchor: true });
+          if (!last || last.ms < anchorMs) out.push({ ms: anchorMs, bpm: g.in, anchor: true });
         }
         out.push({ ms: g.ms, bpm: g.out, anchor: false });
       }
+      // Drop what falls before 0 (an anchor for a step at 0, or a start trimmed by a negative offset)
+      // and state the tempo in effect at 0. With a pre-roll this holds the first tempo from 0.
+      out = out.filter((p) => p.ms >= 0);
+      if (!out.length || out[0].ms > 0) out.unshift({ ms: 0, bpm: bpmAtSec(map, -offsetMs / 1000), anchor: false });
       // Drop redundant middle points of flat runs (a == b == c); keep anchors and ramp endpoints.
       return out.filter((p, i, a) => p.anchor || i === 0 || i === a.length - 1
         || !(a[i - 1].bpm === p.bpm && a[i + 1].bpm === p.bpm));
@@ -334,9 +522,10 @@
     function decodeTimeSignature(v) {
       const n = Math.round(v);
       const num = (n % 99) + 1;
-      const den = 2 ** Math.floor(n / 99);
+      const denPow = Math.floor(n / 99);
+      const den = 2 ** denPow;
       if (n < 0 || den > 64) return { label: `?(${n})`, valid: false };
-      return { label: `${num}/${den}`, valid: true };
+      return { label: `${num}/${den}`, valid: true, num, denPow };
     }
 
     // ---------- Locators ----------
@@ -348,6 +537,26 @@
         name: prop(l, 'Name') ?? '',
         beat: parseFloat(prop(l, 'Time')),
       })).filter((l) => Number.isFinite(l.beat)).sort((a, b) => a.beat - b.beat);
+    }
+
+    // ---------- Version detection ----------
+    // Layouts handled: Live 8 (Tempo under MasterTrack/Mixer, ArrangerAutomation events),
+    // Live 9–11 (MasterTrack/DeviceChain/Mixer, AutomationEnvelopes by PointeeId), Live 12 (MainTrack).
+    const SUPPORTED = { min: 8, max: 12 };
+
+    function detectVersion(root) {
+      const creator = root.getAttribute('Creator') || '';
+      const m = creator.match(/Live\s+(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
+      if (!m) {
+        return { label: creator || 'Unknown', major: null, supported: false,
+          warning: 'Could not detect which Live version created this set. Results may be incomplete — please check them.' };
+      }
+      const major = parseInt(m[1], 10);
+      const label = `Live ${m.slice(1).filter(Boolean).join('.')}`;
+      let warning = null;
+      if (major < SUPPORTED.min) warning = `${label} is older than the supported range (Live ${SUPPORTED.min}–${SUPPORTED.max}). Results may be incomplete — please check them.`;
+      else if (major > SUPPORTED.max) warning = `${label} is newer than the newest tested version (Live ${SUPPORTED.max}). The set was read using the Live ${SUPPORTED.max} layout — spot-check a couple of marker times.`;
+      return { label, major, supported: !warning, warning };
     }
 
     // ---------- Top level ----------
@@ -369,29 +578,399 @@
         const ms = Math.round(beatToAbsoluteTime(map, e.beat));
         const d = decodeTimeSignature(e.value);
         const last = sigs[sigs.length - 1];
-        if (last && last.ms === ms) { Object.assign(last, d, { raw: e.value }); continue; }
+        if (last && last.ms === ms) {
+          Object.assign(last, d, { raw: e.value });
+          // The replacement may now repeat the signature before it.
+          if (sigs.length > 1 && sigs[sigs.length - 2].label === last.label) sigs.pop();
+          continue;
+        }
         if (last && last.label === d.label) continue;
-        sigs.push({ ms, raw: e.value, ...d });
+        sigs.push({ ms, beat: e.beat, raw: e.value, ...d });
       }
 
       return {
         creator: root.getAttribute('Creator') || 'Ableton Live',
+        version: detectVersion(root),
         masterTag: master.nodeName,
         map,
         tempoSource: tempo.source,
+        curvedTempo: tempo.events.filter((e) => e.curved).length,
         sigSource: sig.source,
         markers,
         sigs,
       };
     }
 
-    const renderMarkers = (r) => r.markers.map((m) => `${m.name} -> ${formatMs(m.ms)}`).join('\n');
-    const renderTempo = (r, anchors) => tempoPoints(r.map, anchors).map((p) => `${p.bpm.toFixed(4)} -> ${formatMs(p.ms)}`).join('\n');
-    const renderSigs = (r) => r.sigs.map((s) => `${s.label} -> ${formatMs(s.ms)}`).join('\n');
+    // ---------- Rows with offset applied (shared by text, linter, summary) ----------
+    const isBlank = (m) => !m.name.trim();
+    // Locators that make it into the outputs (text, MIDI, linter), before any offset.
+    const usableMarkers = (r, o) => (withDefaults(o).skipBlank ? r.markers.filter((m) => !isBlank(m)) : r.markers);
+
+    // The single keep/drop rule for locators, used by the text, the linter and the MIDI export.
+    function markerRows(r, o) {
+      o = withDefaults(o);
+      const rows = [];
+      let dropped = 0;
+      for (const m of usableMarkers(r, o)) {
+        const ms = Math.round(m.ms + o.offsetMs);
+        if (ms < 0) { dropped++; continue; }
+        rows.push({ name: m.name, ms, beat: m.beat });
+      }
+      return { rows, dropped };
+    }
+
+    // "+1.25 s", "−0.04 s": the offset exactly as applied (to the ms).
+    const formatOffset = (ms) => `${ms > 0 ? '+' : ms < 0 ? '−' : ''}${parseFloat((Math.abs(ms) / 1000).toFixed(3))} s`;
+
+    // Offset field text -> ms, or null if it is not a number. Accepts "2.5" and "2,5" (Spanish keyboards).
+    function parseOffset(text) {
+      const s = String(text ?? '').trim().replace(',', '.');
+      if (!s) return 0;
+      if (!/^[+-]?(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
+      return Math.round(parseFloat(s) * 1000);
+    }
+
+    function sigRows(r, o) {
+      o = withDefaults(o);
+      const shifted = r.sigs.map((s) => ({ ...s, ms: s.ms + Math.round(o.offsetMs) }));
+      const before = shifted.filter((s) => s.ms <= 0);
+      let rows = shifted.filter((s) => s.ms > 0);
+      // The signature in effect at 0 (trimmed start), or the first one held through the pre-roll.
+      if (before.length) rows.unshift({ ...before[before.length - 1], ms: 0 });
+      else if (rows.length) rows.unshift({ ...rows[0], ms: 0 });
+      return rows.filter((s, i) => i === 0 || s.label !== rows[i - 1].label);
+    }
+
+    // Line breaks inside a locator name would split one marker across lines; flatten them to spaces.
+    const cleanName = (name) => name.replace(/[\r\n]+/g, ' ');
+
+    function renderMarkers(r, o) {
+      o = withDefaults(o);
+      return markerRows(r, o).rows.map((m) => `${cleanName(m.name)} -> ${formatTime(m.ms, o.format)}`).join('\n');
+    }
+    function renderTempo(r, o) {
+      o = withDefaults(o);
+      return tempoPoints(o.smoothRamps ? smoothRamps(r.map) : r.map, o.anchors, Math.round(o.offsetMs))
+        .map((p) => `${p.bpm.toFixed(4)} -> ${formatTime(p.ms, o.format)}`).join('\n');
+    }
+    function renderSigs(r, o) {
+      o = withDefaults(o);
+      return sigRows(r, o).map((s) => `${s.label} -> ${formatTime(s.ms, o.format)}`).join('\n');
+    }
+
+    // ---------- Session linter ----------
+    // Section names Secuencias.com users commonly expect. Numbered/lettered variants ("Verse 2",
+    // "Chorus x2", "Bridge B") are accepted. Edit this list to match your own standard.
+    const SECTION_NAMES = [
+      'Count Off', 'Count In', 'Click', 'Intro', 'Verse', 'Pre-Chorus', 'Chorus', 'Post-Chorus',
+      'Refrain', 'Hook', 'Bridge', 'Interlude', 'Instrumental', 'Solo', 'Breakdown', 'Build',
+      'Drop', 'Turnaround', 'Vamp', 'Tag', 'Outro', 'Ending', 'End',
+    ];
+    // A standard name may carry one of these in front: "Final Chorus", "Double Chorus", "Half Verse".
+    const NAME_MODIFIERS = ['final', 'last', 'first', 'double', 'half', 'big', 'small', 'soft', 'acoustic', 'new', 'extended'];
+    // Suggested standard name for common non-standard (mostly Spanish) names. First match wins.
+    // Each prefix must be a whole word (followed by a space, digit, "(" or the end).
+    const word = (alts) => new RegExp(`^(${alts})(?=$|[\\s\\d(])`, 'i');
+    const NAME_SUGGESTIONS = [
+      [word('pre[\\s-]?coro|precoro'), 'Pre-Chorus'],
+      [word('post[\\s-]?coro|postcoro'), 'Post-Chorus'],
+      [word('coro|estribillo'), 'Chorus'],
+      [word('verso|estrofa'), 'Verse'],
+      [word('puente'), 'Bridge'],
+      [word('interludio'), 'Interlude'],
+      [word('introducci[oó]n'), 'Intro'],
+      [word('final|fin|salida|cierre'), 'Outro'],
+      [word('conteo|cuenta|claqueta'), 'Count Off'],
+      [word('solo'), 'Solo'],
+    ];
+    const normName = (s) => s.toLowerCase().replace(/[^a-z]/g, '');
+    const STANDARD = new Set(SECTION_NAMES.map(normName));
+    // Strip a trailing counter: "Verse 2", "Verse2", "Chorus x2", "Chorus (x2)", "Bridge B", "Verse II", "Chorus (2)".
+    const baseName = (name) => name.trim()
+      .replace(/\s*(\(\s*x?\s*\d+\s*x?\s*\)|\d+x?|x\s?\d+)$/i, '')
+      .replace(/\s+([a-d]|i{1,3}|iv)$/i, '').trim();
+
+    function isStandardName(name) {
+      const base = baseName(name);
+      if (STANDARD.has(normName(base))) return true;
+      const [first, ...rest] = base.split(/\s+/);
+      return rest.length > 0 && NAME_MODIFIERS.includes(first.toLowerCase()) && STANDARD.has(normName(rest.join(' ')));
+    }
+    function suggestName(name) {
+      const hit = NAME_SUGGESTIONS.find(([re]) => re.test(name.trim()));
+      return hit ? hit[1] : null;
+    }
+
+    // Returns [{ level: 'error' | 'warning' | 'info', title, detail? }], most severe first.
+    // 'info' rows are notes about what the current options did; they don't affect a song's status.
+    function lint(r, o) {
+      o = withDefaults(o);
+      const issues = [];
+      const err = (title, detail) => issues.push({ level: 'error', title, detail });
+      const warn = (title, detail) => issues.push({ level: 'warning', title, detail });
+      const info = (title, detail) => issues.push({ level: 'info', title, detail });
+      const markers = usableMarkers(r, o);
+
+      // Song must start at zero (checked on Ableton's own timeline, before any offset).
+      if (!markers.length) {
+        err('No locators in this set', 'Add a locator at the very start of the arrangement (e.g. "Count Off" or "Intro") and one per section.');
+      } else if (Math.round(markers[0].ms) !== 0) {
+        const first = markers[0];
+        err('No locator at 00:00:000 — the song must start at zero',
+          `The first locator is "${cleanName(first.name)}" at ${formatMs(first.ms)}. Add a locator at the start of the arrangement.`);
+      }
+
+      const { dropped } = markerRows(r, o);
+      if (dropped) {
+        err(`${dropped} locator(s) fall before 00:00:000 after the ${formatOffset(o.offsetMs)} offset`,
+          'They are left out of the text and the MIDI export. Use a smaller negative offset to keep them.');
+      }
+
+      const blank = r.markers.filter(isBlank);
+      if (blank.length && o.skipBlank) {
+        info(`${blank.length} blank-named locator(s) skipped`,
+          `At ${blank.map((m) => formatMs(m.ms)).join(', ')}. Left out of the text and MIDI; turn off "Skip blank locators" to include them.`);
+      } else if (blank.length) {
+        warn(`${blank.length} locator(s) have a blank name`, 'They are kept as-is. Name them in Ableton so the section shows up in Secuencias.');
+      }
+
+      const seen = new Set();
+      for (const m of markers) {
+        const name = cleanName(m.name).trim();
+        if (!name || seen.has(name) || isStandardName(name)) continue;
+        seen.add(name);
+        const s = suggestName(name);
+        warn(`Non-standard locator name "${name}"`, s ? `Recommended: "${s}".` : `Common names: ${SECTION_NAMES.slice(3, 15).join(', ')}…`);
+      }
+
+      const bpms = new Set(tempoPoints(r.map, false).map((p) => p.bpm));
+      if (bpms.size === 1) warn(`Static tempo: ${[...bpms][0].toFixed(2)} BPM for the whole song`, 'No tempo changes were found. Make sure this is intentional.');
+
+      if (r.version.warning) warn('Live version', r.version.warning);
+      if (r.curvedTempo) warn(`${r.curvedTempo} tempo point(s) use curved automation`, 'Curves are calculated as straight ramps, so times after them may drift slightly. Flatten the curves in Ableton for exact times.');
+      const badSigs = r.sigs.filter((s) => !s.valid).length;
+      if (badSigs) warn(`${badSigs} time signature value(s) could not be decoded`, 'They are shown as ?(raw value) and left out of the MIDI export.');
+
+      const RANK = { error: 0, warning: 1, info: 2 };
+      return issues.sort((a, b) => RANK[a.level] - RANK[b.level]);
+    }
+
+    // ---------- MIDI export (Standard MIDI File, format 1, one conductor track) ----------
+    const PPQ = 960;              // ticks per quarter note (Ableton beat = quarter note)
+    const RAMP_STEP_BEATS = 0.25; // MIDI tempo can only step: ramps become 16th-note steps
+
+    function vlq(n) {
+      const bytes = [n & 0x7f];
+      while ((n = Math.floor(n / 128)) > 0) bytes.unshift((n & 0x7f) | 0x80);
+      return bytes;
+    }
+    const utf8 = (s) => Array.from(new TextEncoder().encode(s));
+    const be = (n, len) => Array.from({ length: len }, (_, i) => (n >>> (8 * (len - 1 - i))) & 0xff);
+    const clampUs = (us) => Math.min(0xffffff, Math.max(1, Math.round(us)));
+
+    // Beat positions where the MIDI tempo changes, each with Ableton's exact elapsed seconds there.
+    // Ramps are cut into 16th-note pieces plus a cut at every `splitBeats` beat inside them (markers,
+    // time signatures), so those events sit on a boundary where MIDI time is exact. `cutBeat` (the start
+    // of a trimmed song) is cut wherever it falls. Each bound records whether it starts a flat stretch,
+    // a ramp, or a ramp entered by a step.
+    function tempoBoundaries(map, splitBeats = [], cutBeat = null) {
+      const bounds = [];
+      const inside = (a, b, beats) => beats.filter((x) => x > a && x < b);
+      const secAt = (p, b) => p.sec + segmentSeconds(b - p.beat, p.value, bpmAtBeat(map, b));
+      // The trim point can only sit on a whole tick, so the span after it also ends on a boundary
+      // (the next marker/signature) whose tempo absorbs that rounding.
+      const afterCut = cutBeat == null ? [] : splitBeats.filter((x) => x > cutBeat).sort((a, b) => a - b).slice(0, 1);
+      const cut = cutBeat == null ? [] : [cutBeat, ...afterCut];
+      for (let i = 0; i < map.length; i++) {
+        const p = map[i], n = map[i + 1];
+        if (!n) {
+          bounds.push({ beat: p.beat, sec: p.sec, tailBpm: p.value, kind: 'flat' });
+          for (const b of cut.filter((x) => x > p.beat)) bounds.push({ beat: b, sec: p.sec + (b - p.beat) * 60 / p.value, tailBpm: p.value, kind: 'flat' });
+          break;
+        }
+        if (n.beat === p.beat) continue; // a step: the next point takes over at the same beat
+        if (Math.abs(n.value - p.value) < EPS_BPM) {
+          for (const b of [p.beat, ...inside(p.beat, n.beat, cut)]) bounds.push({ beat: b, sec: secAt(p, b), kind: 'flat' });
+          continue;
+        }
+        const enteredByStep = i > 0 && map[i - 1].beat === p.beat && Math.abs(map[i - 1].value - p.value) > EPS_BPM;
+        const steps = Math.max(1, Math.ceil((n.beat - p.beat) / RAMP_STEP_BEATS));
+        const pieces = Array.from({ length: steps }, (_, j) => p.beat + (n.beat - p.beat) * j / steps);
+        const beats = [...new Set([...pieces, ...inside(p.beat, n.beat, [...splitBeats, ...cut])])].sort((a, b) => a - b);
+        beats.forEach((b, j) => bounds.push({ beat: b, sec: secAt(p, b), kind: 'ramp', rampStart: j === 0, enteredByStep }));
+      }
+      for (const b of bounds) b.tick = b.beat === cutBeat ? cutTick(cutBeat) : Math.round(b.beat * PPQ);
+      return bounds;
+    }
+    // The trim point rounds *down* to a tick, so it is never after a locator the text keeps.
+    const cutTick = (beat) => Math.floor(beat * PPQ);
+
+    // Tempo events whose MIDI-integrated time matches Ableton's at every boundary. Each segment's
+    // µs-per-quarter is chosen from the *remaining* ideal time, so rounding never accumulates.
+    function midiTempoEvents(map, splitBeats, cutBeat) {
+      const bounds = tempoBoundaries(map, splitBeats, cutBeat);
+      const events = [];
+      let us = 0; // MIDI time at the current boundary
+      for (let i = 0; i < bounds.length; i++) {
+        const tick = bounds[i].tick;
+        const next = bounds[i + 1];
+        let usPerQ;
+        if (!next) usPerQ = clampUs(60e6 / bounds[i].tailBpm);
+        else {
+          const dTick = next.tick - tick;
+          if (dTick <= 0) continue;
+          usPerQ = clampUs((next.sec * 1e6 - us) / (dTick / PPQ));
+          us += usPerQ * dTick / PPQ;
+        }
+        const last = events[events.length - 1];
+        // A cut at the trim point must stay an event even when the tempo there does not change.
+        if (last && last.usPerQ === usPerQ && bounds[i].beat !== cutBeat) continue;
+        const { kind, rampStart, enteredByStep } = bounds[i];
+        events.push({ tick, kind: 'tempo', usPerQ, flat: kind === 'flat', rampStart: !!rampStart && !enteredByStep });
+      }
+      // Hold events: a reader that interpolates between tempo events would otherwise glide from the
+      // flat stretch's first event straight into the ramp. Repeating the flat tempo 1 tick before the
+      // ramp keeps the stretch flat; for a standard reader it is a no-op. (Steps get anchors instead.)
+      // The file stays exact for standard (stepping) readers: each ramp piece carries its average
+      // tempo, so an interpolating reader is still a few tens of ms off after a ramp, not seconds.
+      const out = [];
+      events.forEach((e, i) => {
+        const prev = events[i - 1];
+        if (prev && e.rampStart && prev.flat && e.tick - 1 > prev.tick) out.push({ tick: e.tick - 1, kind: 'tempo', usPerQ: prev.usPerQ, hold: true });
+        out.push(e);
+      });
+      return out;
+    }
+
+    function buildMidi(r, o, trackName = 'Tempo Map') {
+      o = withDefaults(o);
+      const map = r.map;
+      const offsetMs = Math.round(o.offsetMs);
+      const cutBeat = offsetMs < 0 ? absoluteTimeToBeat(map, -offsetMs / 1000) : null;
+      // Same keep/drop rule as the markers text, so both always list the same locators.
+      const markerList = markerRows(r, o).rows;
+      const validSigs = r.sigs.filter((s) => s.valid);
+      const tempos = midiTempoEvents(map, [...markerList.map((m) => m.beat), ...validSigs.map((s) => s.beat)], cutBeat);
+      const tempoAt = (tick) => tempos[lastAtOrBefore(tempos, 'tick', tick)];
+
+      // Anchors: a tempo event 1 ms before each step that repeats the tempo already in effect.
+      // A standard MIDI reader treats it as a no-op; a reader that interpolates between tempo
+      // points needs it to jump instead of ramp. Same toggle as the text output.
+      const anchors = [];
+      if (o.anchors) {
+        for (let i = 1; i < map.length; i++) {
+          const p = map[i - 1], n = map[i];
+          if (n.beat !== p.beat || Math.abs(n.value - p.value) < EPS_BPM) continue;
+          const stepTick = Math.round(n.beat * PPQ);
+          let tick = Math.round(absoluteTimeToBeat(map, n.sec - 0.001) * PPQ);
+          if (tick >= stepTick) tick = stepTick - 1;
+          const prev = tempoAt(tick);
+          if (tick <= 0 || prev.tick >= tick) continue;
+          anchors.push({ tick, kind: 'tempo', usPerQ: prev.usPerQ, anchor: true });
+        }
+      }
+
+      const sigs = validSigs.map((s) => ({ tick: Math.round(s.beat * PPQ), kind: 'sig', num: s.num, denPow: s.denPow }));
+      const markers = markerList.map((m) => ({ tick: Math.round(m.beat * PPQ), kind: 'marker', text: cleanName(m.name) }));
+
+      const ORDER = { tempo: 0, sig: 1, marker: 2 };
+      let events = [...tempos, ...anchors, ...sigs, ...markers].sort((a, b) => a.tick - b.tick || ORDER[a.kind] - ORDER[b.kind]);
+
+      if (offsetMs > 0) {
+        // Pre-roll at the first tempo; its own tempo value makes the lead-in exactly offsetMs long.
+        const firstUs = tempos[0].usPerQ;
+        const preTicks = Math.max(1, Math.round(offsetMs * 1000 / firstUs * PPQ));
+        const preUs = clampUs(offsetMs * 1000 / (preTicks / PPQ));
+        events = events.map((e) => ({ ...e, tick: e.tick + preTicks }));
+        const firstSig = events.find((e) => e.kind === 'sig');
+        events.unshift(...[{ tick: 0, kind: 'tempo', usPerQ: preUs }, firstSig && { ...firstSig, tick: 0 }].filter(Boolean));
+      } else if (offsetMs < 0) {
+        // Trimmed start: the tempo map has a boundary exactly at the trim point, which becomes tick 0
+        // together with the time signature in effect there. Other tempo/signature events before it
+        // are dropped. Markers were already filtered by the text's rule; one that rounds a tick
+        // before the trim point is clamped to 0 rather than lost.
+        const startTick = cutTick(cutBeat);
+        const inEffect = (kind) => events.filter((e) => e.kind === kind && e.tick <= startTick).pop();
+        const head = [inEffect('tempo'), inEffect('sig')].filter(Boolean).map((e) => ({ ...e, tick: 0 }));
+        const tail = events.filter((e) => e.kind === 'marker' || e.tick > startTick)
+          .map((e) => ({ ...e, tick: Math.max(0, e.tick - startTick) }));
+        events = [...head, ...tail].sort((a, b) => a.tick - b.tick || ORDER[a.kind] - ORDER[b.kind]);
+      }
+
+      const data = [0x00, ...metaEvent(0x03, utf8(trackName))];
+      let tick = 0;
+      for (const e of events) {
+        data.push(...vlq(e.tick - tick));
+        tick = e.tick;
+        if (e.kind === 'tempo') data.push(...metaEvent(0x51, be(e.usPerQ, 3)));
+        else if (e.kind === 'sig') data.push(...metaEvent(0x58, [e.num, e.denPow, 24, 8]));
+        else data.push(...metaEvent(0x06, utf8(e.text)));
+      }
+      data.push(0x00, ...metaEvent(0x2f, []));
+
+      return new Uint8Array([
+        ...utf8('MThd'), ...be(6, 4), ...be(1, 2), ...be(1, 2), ...be(PPQ, 2),
+        ...utf8('MTrk'), ...be(data.length, 4), ...data,
+      ]);
+    }
+    function metaEvent(type, payload) { return [0xff, type, ...vlq(payload.length), ...payload]; }
+
+    // ---------- Batch: file names, summary, ZIP ----------
+    const songName = (fileName) => fileName.replace(/\.als$/i, '');
+    const safeFileName = (s) => (s.replace(/[\\/:*?"<>|\x00-\x1f]+/g, '_').trim() || 'Untitled');
+
+    // Case-insensitive unique file names: "Song", "Song (2)", … never reusing a name already taken,
+    // including real names that look generated ("Song (2)" as an actual song title).
+    function uniqueNames(names) {
+      const taken = new Set();
+      return names.map((n) => {
+        const base = safeFileName(n);
+        let name = base;
+        for (let k = 2; taken.has(name.toLowerCase()); k++) name = `${base} (${k})`;
+        taken.add(name.toLowerCase());
+        return name;
+      });
+    }
+
+    // songs: [{ name, fileName, result?, error? }]
+    function buildSummary(songs, o) {
+      o = withDefaults(o);
+      const lines = [
+        'ALS Extractor — setlist summary',
+        `Songs: ${songs.length} · Offset: ${formatOffset(o.offsetMs)} · Time: ${o.format === 'smpte' ? 'SMPTE 30 fps' : 'MM:SS:mmm'}`
+          + ` · Anchor points: ${o.anchors ? 'on' : 'off'} · Smooth ramps: ${o.smoothRamps ? 'on' : 'off'} · Blank locators: ${o.skipBlank ? 'skipped' : 'kept'}`,
+      ];
+      songs.forEach((s, i) => {
+        lines.push('', `=== ${i + 1}. ${s.name} (${s.fileName}) ===`);
+        if (!s.result) { lines.push(`ERROR: ${s.error || 'Could not be read.'}`); return; }
+        const issues = lint(s.result, o);
+        const count = (level) => issues.filter((x) => x.level === level).length;
+        lines.push(`${s.result.version.label} · Health: ${count('error')} error(s), ${count('warning')} warning(s)`);
+        for (const x of issues) lines.push(`  [${{ error: 'ERROR', warning: 'WARN', info: 'NOTE' }[x.level]}] ${x.title}`);
+        lines.push('', '-- Markers', renderMarkers(s.result, o) || '(none)');
+        lines.push('', '-- Tempo Automation', renderTempo(s.result, o) || '(none)');
+        lines.push('', '-- Time Signatures', renderSigs(s.result, o) || '(none)');
+      });
+      return lines.join('\n') + '\n';
+    }
+
+    // Returns the zip in the requested JSZip output type ('blob' in the browser, 'uint8array' in tests).
+    function buildZip(JSZip, songs, o, type = 'blob') {
+      const zip = new JSZip();
+      // Names are reserved only for songs that produce a .mid, so a failed file can't push a good one to "(2)".
+      const ok = songs.filter((s) => s.result);
+      const names = uniqueNames(ok.map((s) => s.name));
+      ok.forEach((s, i) => zip.file(`${names[i]}.mid`, buildMidi(s.result, o, s.name)));
+      // Always MM:SS:mmm: the summary is meant for pasting into Secuencias, and SMPTE frames hide the anchors.
+      zip.file('Setlist summary.txt', buildSummary(songs, { ...withDefaults(o), format: 'ms' }));
+      return zip.generateAsync({ type });
+    }
 
     return {
-      decompress, analyze, buildTempoMap, beatToAbsoluteTime, segmentSeconds, tempoPoints,
-      decodeTimeSignature, formatMs, renderMarkers, renderTempo, renderSigs,
+      SUPPORTED, SECTION_NAMES, PPQ, detectVersion, decompress, analyze, buildTempoMap, beatToAbsoluteTime,
+      absoluteTimeToBeat, segmentSeconds, smoothRamps, tempoPoints, decodeTimeSignature, formatMs, formatSmpte, formatTime,
+      markerRows, sigRows, renderMarkers, renderTempo, renderSigs, isStandardName, suggestName, lint,
+      formatOffset, parseOffset, buildMidi, songName, safeFileName, uniqueNames, buildSummary, buildZip,
     };
   })();
   if (typeof module !== 'undefined') module.exports = ALS;
@@ -403,89 +982,258 @@
     const $ = (id) => document.getElementById(id);
     const dropZone = $('dropZone');
     const fileInput = $('fileInput');
+    const offsetInput = $('offsetInput');
     const anchorToggle = $('anchorToggle');
-    let result = null;
+
+    // songs: [{ name, fileName, size, result?, error? }]
+    let songs = [];
+    let active = 0;
+    let zipping = false;
+    // Filled from the toolbar by readToolbar(); format is the only option without a form control.
+    const opts = { format: 'ms', offsetMs: 0 };
 
     function showError(msg) {
-      const box = $('errorBox');
-      box.textContent = msg;
-      box.classList.remove('hidden');
-    }
-    function clearError() { $('errorBox').classList.add('hidden'); }
-
-    function clearOutputs() {
-      result = null;
-      for (const id of ['outMarkers', 'outTempo', 'outSig']) $(id).value = '';
-      for (const id of ['countMarkers', 'countTempo', 'countSig']) $(id).textContent = '–';
-      $('summary').classList.add('hidden');
-      $('notes').textContent = '';
+      $('errorBox').textContent = msg;
+      $('errorBox').classList.toggle('hidden', !msg);
     }
 
-    function renderTempo() {
-      if (!result) return;
-      const text = ALS.renderTempo(result, anchorToggle.checked);
-      $('outTempo').value = text;
-      $('countTempo').textContent = `${text ? text.split('\n').length : 0} points`;
+    // ---------- Tabs ----------
+    function songStatus(s) {
+      if (!s.result) return 'error';
+      const issues = ALS.lint(s.result, opts);
+      if (issues.some((x) => x.level === 'error')) return 'error';
+      return issues.some((x) => x.level === 'warning') ? 'warning' : 'ok';
+    }
+    const DOT = { error: 'bg-live-red', warning: 'bg-live-yellow', ok: 'bg-live-green', pending: 'bg-live-dim animate-pulse' };
+
+    function renderTabs() {
+      const nav = $('tabs');
+      nav.replaceChildren(...songs.map((s, i) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.setAttribute('role', 'tab');
+        b.className = 'tab shrink-0 flex items-center gap-2 px-4 py-2 text-sm border border-transparent rounded-t-md text-live-dim hover:text-live-text max-w-[16rem]';
+        b.setAttribute('aria-selected', String(i === active));
+        const dot = document.createElement('span');
+        dot.className = `inline-block w-2 h-2 rounded-full shrink-0 ${DOT[s.pending ? 'pending' : songStatus(s)]}`;
+        const label = document.createElement('span');
+        label.className = 'truncate';
+        label.textContent = `${i + 1}. ${s.name}`;
+        b.append(dot, label);
+        b.addEventListener('click', () => { active = i; renderTabs(); renderSong(); });
+        return b;
+      }));
+      nav.classList.toggle('hidden', !songs.length);
     }
 
-    function render() {
-      $('outMarkers').value = ALS.renderMarkers(result) || '';
-      $('countMarkers').textContent = `${result.markers.length} locators`;
-      $('outSig').value = ALS.renderSigs(result) || '';
-      $('countSig').textContent = `${result.sigs.length} changes`;
-      renderTempo();
+    // ---------- Active song ----------
+    function renderHealth(issues) {
+      const list = $('healthList');
+      const errors = issues.filter((x) => x.level === 'error').length;
+      const warnings = issues.filter((x) => x.level === 'warning').length;
+      $('healthCount').textContent = errors + warnings ? `${errors} error(s) · ${warnings} warning(s)` : 'all checks passed';
+      // Info rows (what the options did) go under the "all checks passed" row when nothing else is wrong.
+      const rows = errors + warnings ? issues
+        : [{ level: 'ok', title: 'All checks passed', detail: 'Starts at zero, standard section names, tempo changes found.' }, ...issues];
+      const STYLE = {
+        error: ['border-live-red', 'text-live-red', '✖'],
+        warning: ['border-live-yellow', 'text-live-yellow', '▲'],
+        ok: ['border-live-green', 'text-live-green', '✔'],
+        info: ['border-live-blue', 'text-live-blue', 'ℹ'],
+      };
+      list.replaceChildren(...rows.map((x) => {
+        const [border, color, icon] = STYLE[x.level];
+        const li = document.createElement('li');
+        li.className = `flex gap-3 px-4 py-2.5 border-l-4 ${border}`;
+        const i = document.createElement('span');
+        i.className = `${color} font-mono shrink-0`;
+        i.textContent = icon;
+        const body = document.createElement('div');
+        const t = document.createElement('div');
+        t.className = color;
+        t.textContent = x.title;
+        body.append(t);
+        if (x.detail) {
+          const d = document.createElement('div');
+          d.className = 'text-live-dim text-xs mt-0.5';
+          d.textContent = x.detail;
+          body.append(d);
+        }
+        li.append(i, body);
+        return li;
+      }));
+    }
 
-      const bpms = result.map.map((p) => p.value);
-      const lastMs = result.map[result.map.length - 1].sec * 1000;
+    function setLines(id, countId, text, unit) {
+      $(id).value = text;
+      $(countId).textContent = `${text ? text.split('\n').length : 0} ${unit}`;
+    }
+
+    function renderSong() {
+      const s = songs[active];
+      $('songPanel').classList.toggle('hidden', !s);
+      if (!s) return;
+      $('songTitle').textContent = s.name;
+      const parts = [s.fileName, `${(s.size / 1024).toFixed(1)} KB`];
+      if (s.result) parts.push(s.result.version.label);
+      $('songMeta').textContent = parts.join(' · ');
+
+      const ok = !!s.result;
+      $('songError').textContent = ok ? '' : (s.pending ? 'Reading…' : s.error);
+      $('songError').classList.toggle('hidden', ok);
+      for (const id of ['healthPanel', 'summary', 'cards', 'notes', 'midiBtn']) $(id).classList.toggle('hidden', !ok);
+      if (!ok) return;
+
+      const r = s.result;
+      renderHealth(ALS.lint(r, opts));
+      setLines('outMarkers', 'countMarkers', ALS.renderMarkers(r, opts), 'locators');
+      setLines('outTempo', 'countTempo', ALS.renderTempo(r, opts), 'points');
+      setLines('outSig', 'countSig', ALS.renderSigs(r, opts), 'changes');
+
+      // Same points as the Tempo card (offset included), not the raw map: the raw map's first entry can
+      // be Ableton's placeholder value, and a trimmed start can begin mid-song at a different tempo.
+      const pts = ALS.tempoPoints(r.map, false, opts.offsetMs);
+      let min = Infinity, max = -Infinity;
+      for (const p of pts) { if (p.bpm < min) min = p.bpm; if (p.bpm > max) max = p.bpm; }
+      const lastMs = pts[pts.length - 1].ms;
       const cells = [
-        ['Created with', result.creator],
-        ['Start tempo', `${result.map[0].value.toFixed(2)} BPM`],
-        ['Tempo range', `${Math.min(...bpms).toFixed(2)}–${Math.max(...bpms).toFixed(2)}`],
-        ['Last tempo event', ALS.formatMs(lastMs)],
+        ['Created with', `${r.version.label}${r.version.supported ? ' ✓' : ' ⚠'}`],
+        ['Start tempo', `${pts[0].bpm.toFixed(2)} BPM`],
+        ['Tempo range', `${min.toFixed(2)}–${max.toFixed(2)}`],
+        ['Last tempo event', ALS.formatTime(lastMs, opts.format)],
       ];
-      $('summary').innerHTML = cells.map(([k, v]) =>
-        `<div class="bg-live-panel px-4 py-3"><div class="text-[11px] uppercase tracking-wider text-live-dim font-sans">${k}</div><div class="mt-1 truncate"></div></div>`).join('');
-      $('summary').querySelectorAll('.truncate').forEach((el, i) => { el.textContent = cells[i][1]; });
-      $('summary').classList.remove('hidden');
+      $('summary').replaceChildren(...cells.map(([k, v]) => {
+        const cell = document.createElement('div');
+        cell.className = 'bg-live-panel px-4 py-3';
+        const key = document.createElement('div');
+        key.className = 'text-[11px] uppercase tracking-wider text-live-dim font-sans';
+        key.textContent = k;
+        const val = document.createElement('div');
+        val.className = 'mt-1 truncate';
+        val.textContent = v;
+        cell.append(key, val);
+        return cell;
+      }));
 
-      const notes = [`Tempo source: ${result.tempoSource}`, `time signature source: ${result.sigSource}`, `track tag: <${result.masterTag}>`];
-      const bad = result.sigs.filter((s) => !s.valid);
-      if (bad.length) notes.push(`${bad.length} time signature value(s) could not be decoded (shown as ?(raw))`);
-      $('notes').textContent = notes.join(' · ');
+      $('notes').textContent = [`Tempo source: ${r.tempoSource}`, `time signature source: ${r.sigSource}`, `track tag: <${r.masterTag}>`].join(' · ');
     }
 
-    async function handleFile(file) {
-      clearError();
-      clearOutputs();
-      if (!file) return;
+    function renderAll() {
+      $('toolbar').classList.toggle('hidden', !songs.length);
+      // Only once every song has finished loading, so the ZIP is never a silent partial setlist.
+      const loading = songs.filter((s) => s.pending).length;
+      const zip = $('zipBtn');
+      zip.disabled = zipping || loading > 0 || !songs.some((s) => s.result);
+      zip.classList.toggle('opacity-40', zip.disabled);
+      if (!zipping) zip.textContent = loading ? `Loading ${songs.length - loading}/${songs.length}…` : 'Download All (ZIP)';
+      renderTabs();
+      renderSong();
+    }
+
+    // ---------- Loading ----------
+    // Bumped per drop so a slow earlier batch can't overwrite a later one. A new drop replaces the setlist.
+    let generation = 0;
+
+    async function handleFiles(fileList) {
+      const files = Array.from(fileList || []);
+      // Ignore non-file drops (text, links) so they don't wipe the current results.
+      if (!files.length) return;
+      const gen = ++generation;
+      showError('');
+      songs = files.map((f) => ({ name: ALS.songName(f.name), fileName: f.name, size: f.size, pending: true }));
+      active = 0;
       const info = $('fileInfo');
-      info.textContent = `${file.name} · ${(file.size / 1024).toFixed(1)} KB`;
+      info.textContent = files.length === 1 ? `${files[0].name} · ${(files[0].size / 1024).toFixed(1)} KB` : `${files.length} files`;
       info.classList.remove('hidden');
-      if (!/\.als$/i.test(file.name)) {
-        showError(`“${file.name}” is not an .als file. Please choose an Ableton Live Set.`);
-        return;
-      }
-      try {
-        const xml = await ALS.decompress(await file.arrayBuffer());
-        const doc = new DOMParser().parseFromString(xml, 'application/xml');
-        result = ALS.analyze(doc);
-        render();
-      } catch (err) {
-        console.error(err);
-        showError(err.message || String(err));
+      renderAll();
+
+      // One at a time keeps memory flat for large setlists; each song fails independently.
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i], s = songs[i];
+        try {
+          if (!/\.als$/i.test(f.name)) throw new Error(`“${f.name}” is not an .als file. Please choose an Ableton Live Set.`);
+          const buf = await f.arrayBuffer();
+          if (gen !== generation) return;
+          const xml = await ALS.decompress(buf);
+          if (gen !== generation) return;
+          s.result = ALS.analyze(new DOMParser().parseFromString(xml, 'application/xml'));
+        } catch (err) {
+          if (gen !== generation) return;
+          console.error(f.name, err);
+          s.error = err.message || String(err);
+        }
+        s.pending = false;
+        renderAll();
       }
     }
 
     // Drag & drop
     ['dragenter', 'dragover'].forEach((t) => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.add('drop-active'); }));
-    ['dragleave', 'drop'].forEach((t) => dropZone.addEventListener(t, (e) => { e.preventDefault(); dropZone.classList.remove('drop-active'); }));
-    dropZone.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
-    fileInput.addEventListener('change', () => { handleFile(fileInput.files[0]); fileInput.value = ''; });
+    dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('drop-active'); });
+    dropZone.addEventListener('drop', (e) => { e.preventDefault(); dropZone.classList.remove('drop-active'); handleFiles(e.dataTransfer.files); });
+    fileInput.addEventListener('change', () => { handleFiles(fileInput.files); fileInput.value = ''; });
     // Stop the browser from opening a file dropped outside the zone.
     window.addEventListener('dragover', (e) => e.preventDefault());
     window.addEventListener('drop', (e) => e.preventDefault());
 
-    anchorToggle.addEventListener('change', renderTempo);
+    // ---------- Toolbar ----------
+    // opts is always read from the controls, never kept as a separate copy: browsers may restore
+    // form state on reload or back/forward, and the output must match what the toolbar shows.
+    function readToolbar() {
+      const ms = ALS.parseOffset(offsetInput.value);
+      const bad = ms === null;
+      // An invalid entry keeps the last valid offset (shown next to the field) instead of guessing.
+      if (!bad) opts.offsetMs = ms;
+      offsetInput.classList.toggle('border-live-red', bad);
+      offsetInput.setAttribute('aria-invalid', String(bad));
+      $('offsetError').textContent = bad ? `Not a number — still using ${ALS.formatOffset(opts.offsetMs)}` : '';
+      $('offsetError').classList.toggle('hidden', !bad);
+      opts.anchors = anchorToggle.checked;
+      opts.smoothRamps = $('smoothToggle').checked;
+      opts.skipBlank = $('blankToggle').checked;
+      document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.format === opts.format)));
+      $('smpteNotice').classList.toggle('hidden', opts.format !== 'smpte');
+    }
+    const onToolbarChange = () => { readToolbar(); renderAll(); };
+
+    offsetInput.addEventListener('input', onToolbarChange);
+    for (const el of [anchorToggle, $('smoothToggle'), $('blankToggle')]) el.addEventListener('change', onToolbarChange);
+    document.querySelectorAll('.seg button').forEach((btn) => {
+      btn.addEventListener('click', () => { opts.format = btn.dataset.format; onToolbarChange(); });
+    });
+    readToolbar();
+    // Back/forward cache restores the page with its controls as they were left.
+    window.addEventListener('pageshow', onToolbarChange);
+
+    // ---------- Exports ----------
+    function needLib(name, ok) {
+      if (!ok) showError(`${name} could not be loaded from the CDN (offline or blocked?). Reload the page and try again.`);
+      return ok;
+    }
+
+    $('midiBtn').addEventListener('click', () => {
+      const s = songs[active];
+      if (!s?.result || !needLib('FileSaver.js', typeof saveAs === 'function')) return;
+      const bytes = ALS.buildMidi(s.result, opts, s.name);
+      saveAs(new Blob([bytes], { type: 'audio/midi' }), `${ALS.safeFileName(s.name)}.mid`);
+    });
+
+    $('zipBtn').addEventListener('click', async () => {
+      if (zipping || songs.some((s) => s.pending)) return;
+      if (!needLib('JSZip', typeof JSZip === 'function') || !needLib('FileSaver.js', typeof saveAs === 'function')) return;
+      zipping = true;
+      $('zipBtn').textContent = 'Zipping…';
+      renderAll();
+      try {
+        saveAs(await ALS.buildZip(JSZip, songs, opts), songs.length === 1 ? `${ALS.safeFileName(songs[0].name)}.zip` : 'Setlist.zip');
+      } catch (err) {
+        console.error(err);
+        showError(`Could not build the ZIP: ${err.message || err}`);
+      } finally {
+        zipping = false;
+        renderAll();
+      }
+    });
 
     // Copy buttons, with a fallback for file:// pages where navigator.clipboard may be unavailable.
     document.querySelectorAll('.copy-btn').forEach((btn) => {

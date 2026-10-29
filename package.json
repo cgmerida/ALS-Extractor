@@ -1,0 +1,14 @@
+{
+  "name": "als-extractor",
+  "private": true,
+  "description": "Ableton Live Set to Secuencias.com extractor — regression tests for index.html",
+  "scripts": {
+    "test": "node --test \"tests/**/*.test.js\""
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "0.8.10",
+    "jszip": "3.10.1",
+    "midi-file": "1.2.4",
+    "pako": "2.1.0"
+  }
+}
