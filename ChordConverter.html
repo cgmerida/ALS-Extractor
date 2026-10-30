@@ -145,6 +145,8 @@
     // "Final de los tiempos" or "Coronado" stay lyrics.
     const SECTION_WORDS = 'intro|verso|verse|coro|chorus|estribillo|pre[- ]?coro|pre[- ]?chorus|pre[- ]?estribillo|puente|bridge|' +
       'interludio|interlude|instrumental|outro|salida|final|ending|turnaround|vamp|tag|coda|refrain|complex|' +
+      'introducci[oó]n|estrofa|post[- ]?coro|post[- ]?chorus|pre[- ]?puente|breakdown|hook|intermedio|refr[aá]n|' +
+      'cierre|fin|solo(?: de [a-záéíóúñ]+)?|' +
       '(?:primera|segunda|tercera|cuarta) parte|parte';
     const SECTION = new RegExp(`^(?:${SECTION_WORDS})(?:\\s+(?:\\d+|[ivx]+))?\\s*:?(?:\\s*(?:[x×]\\s*\\d+|\\d+\\s*[x×]))?` +
       `(?:\\s*\\([^)]*\\))?(?:\\s+[-–—]\\s+.+)?\\s*:?$`, 'i');

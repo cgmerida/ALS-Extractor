@@ -116,6 +116,14 @@ test('only real chord numbers', () => {
   for (const c of ['C7b9', 'C7#9', 'Cno3', 'Cadd11', 'G13', 'Bb7sus4', 'Asus2']) assert(Chords.isChord(c), c);
 });
 
+test('more section names, still only as whole lines', () => {
+  for (const h of ['Introducción', 'Estrofa 2', 'Post-Coro', 'Post Chorus', 'Pre-Puente', 'Breakdown', 'Hook', 'Intermedio',
+    'Solo', 'Solo de guitarra', 'Fin', 'Cierre', 'Refrán', 'Estrofa 1 (suave)'])
+    assert.strictEqual(Chords.classify(h).type, 'header', h);
+  for (const l of ['Solo tú eres santo', 'Fin del mundo', 'Hook me up', 'Cierre mis ojos'])
+    assert.strictEqual(Chords.classify(l).type, 'text', l);
+});
+
 // Known limits, pinned so a change in behavior is deliberate.
 test('known limits', () => {
   // Decorations are dropped when merged into a lyric ("x2" would otherwise become lyric text).
