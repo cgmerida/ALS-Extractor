@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ALS Extractor</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
@@ -71,9 +72,12 @@
         </div>
         <p class="mt-1 text-live-dim text-sm">Ableton Live Set &rarr; Secuencias.com markers, tempo map, time signatures &amp; MIDI</p>
       </div>
-      <div class="flex items-center gap-2 text-xs text-live-dim font-mono">
-        <span class="inline-block w-2 h-2 rounded-full bg-live-green"></span>
-        100% client-side &middot; your files never leave this browser
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <a href="ChordConverter.html" class="border border-live-line text-live-dim hover:text-live-text hover:border-live-dim font-bold uppercase tracking-wider text-xs px-4 py-2 rounded transition">Chord Converter &rarr;</a>
+        <div class="flex items-center gap-2 text-xs text-live-dim font-mono">
+          <span class="inline-block w-2 h-2 rounded-full bg-live-green"></span>
+          100% client-side<span class="hidden xl:inline">&nbsp;&middot; your files never leave this browser</span>
+        </div>
       </div>
     </div>
   </header>
@@ -1171,6 +1175,7 @@
         const ta = Object.assign(document.createElement('textarea'), { value: text, readOnly: true });
         ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
         document.body.append(ta);
+        ta.focus();
         ta.select();
         let ok = false;
         try { ok = document.execCommand('copy'); } catch (_) { ok = false; }

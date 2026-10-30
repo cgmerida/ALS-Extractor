@@ -1,76 +1,332 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MultiTracks Chord Converter</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .font-mono { font-family: 'JetBrains Mono', monospace; }
-        
-        /* Custom scrollbar for textareas */
-        textarea::-webkit-scrollbar { width: 8px; }
-        textarea::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
-        textarea::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
-        textarea::-webkit-scrollbar-thumb:hover { background: #64748b; }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Chord Converter</title>
+  <link rel="icon" type="image/svg+xml" href="favicon-chords.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Jost:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.16"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Jost', 'Futura', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+          },
+          colors: {
+            live: {
+              bg: '#161616',
+              panel: '#222222',
+              raised: '#2d2d2d',
+              line: '#3a3a3a',
+              text: '#e6e6e6',
+              dim: '#8c8c8c',
+              orange: '#ff764d',
+              yellow: '#ffd23f',
+              green: '#7ad46b',
+              blue: '#6fa8ff',
+              red: '#ff5c5c',
+            },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body { background: #161616; }
+    .list, textarea { scrollbar-color: #3a3a3a #1b1b1b; }
+    .section[data-copied="true"] .check { display: inline; }
+    .section[data-next="true"] { border-color: #ff764d; }
+    /* Output of the input line under the cursor (wins over "next"). */
+    .section[data-active="true"] { border-color: #ffd23f; }
+    .out-line[data-active="true"] { background: rgba(255, 210, 63, 0.14); }
+  </style>
 </head>
-<body class="bg-slate-950 text-slate-200 min-h-screen flex flex-col antialiased">
+<!-- From lg up the page is exactly one screen tall (never shorter than 640px): the panels fill it and
+       scroll inside. Below lg the panels stack and the page scrolls normally. -->
+<body class="min-h-screen lg:h-screen lg:min-h-[640px] flex flex-col text-live-text font-sans antialiased">
 
-    <!-- Header -->
-    <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 shadow-sm">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center gap-3">
-                <div class="bg-indigo-600 p-2 rounded-lg text-white">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
-                    </svg>
-                </div>
-                <h1 class="text-xl font-semibold text-white tracking-tight">MultiTracks Chord Converter</h1>
-            </div>
-            <button onclick="copyOutput()" id="copyBtn" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg shadow-lg shadow-indigo-500/20 transition-all active:scale-95 focus:outline-none">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
-                </svg>
-                Copy Output
-            </button>
+  <!-- Header -->
+  <header class="shrink-0 border-b border-live-line">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <!-- Same four-bar mark as the ALS Extractor -->
+          <svg width="28" height="20" viewBox="0 0 28 20" aria-hidden="true">
+            <rect x="0" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="6" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="12" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="18" y="0" width="3" height="20" fill="#e6e6e6"/>
+            <rect x="24" y="16" width="4" height="4" fill="#ff764d"/>
+          </svg>
+          <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">Chord Converter</h1>
         </div>
-    </header>
-
-    <!-- Main Workspace -->
-    <main class="flex-grow max-w-7xl mx-auto w-full p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
-        
-        <!-- Input Side -->
-        <div class="flex-1 flex flex-col bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden min-h-[500px]">
-            <div class="px-4 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
-                <span class="text-sm font-medium text-slate-300 flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Input Chart
-                </span>
-                <button onclick="clearInput()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Clear</button>
-            </div>
-            <textarea id="inputText" class="flex-grow bg-slate-950/50 text-slate-300 font-mono text-[14px] leading-relaxed p-4 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 whitespace-pre" spellcheck="false"></textarea>
+        <p class="mt-1 text-live-dim text-sm">Chords-over-lyrics chart &rarr; MultiTracks <span class="font-mono">[bracketed]</span> chords</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <a href="index.html" class="border border-live-line text-live-dim hover:text-live-text hover:border-live-dim font-bold uppercase tracking-wider text-xs px-4 py-2 rounded transition">&larr; ALS Extractor</a>
+        <div class="flex items-center gap-2 text-xs text-live-dim font-mono">
+          <span class="inline-block w-2 h-2 rounded-full bg-live-green"></span>
+          100% client-side
         </div>
+      </div>
+    </div>
+  </header>
 
-        <!-- Output Side -->
-        <div class="flex-1 flex flex-col bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden min-h-[500px]">
-            <div class="px-4 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
-                <span class="text-sm font-medium text-slate-300 flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Bracketed Output (Click section to copy)
-                </span>
-            </div>
-            <div id="outputContainer" class="flex-grow bg-slate-950/50 p-4 overflow-y-auto space-y-4 h-[500px] lg:h-auto custom-scrollbar">
-                <!-- Sections will be rendered here -->
-            </div>
+  <main class="w-full max-w-7xl mx-auto flex-1 min-h-0 px-4 sm:px-6 py-6 flex flex-col gap-6">
+
+    <div id="errorBox" role="alert" class="hidden border border-live-red/60 bg-live-red/10 text-red-200 rounded-md px-4 py-3 text-sm"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] lg:flex-1 lg:min-h-0 gap-4">
+
+      <!-- Input -->
+      <article class="min-w-0 bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+          <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-yellow">&#9632;</span> Input Chart</h3>
+          <span id="inputCount" class="font-mono text-xs text-live-dim">&ndash;</span>
         </div>
+        <div class="px-4 py-2 text-xs text-live-dim flex items-center justify-between gap-3">
+          <span>Paste chords above lyrics &middot; output updates as you type</span>
+          <button id="clearBtn" type="button" class="shrink-0 font-mono underline hover:text-live-text">clear</button>
+        </div>
+        <textarea id="inputText" spellcheck="false" autocomplete="off" wrap="off"
+          placeholder="VERSE 1&#10;G           C&#10; Amazing grace how sweet"
+          class="flex-1 min-h-[28rem] lg:min-h-0 mx-4 mb-4 bg-[#161616] border border-live-line rounded p-3 font-mono text-[13px] leading-relaxed text-live-text resize-y lg:resize-none focus:outline-none focus:border-live-orange whitespace-pre overflow-auto"></textarea>
+      </article>
 
-    </main>
+      <!-- Output: one block per section. Click a block to copy it, or use "Copy next" to walk through
+           them in order. Copied blocks get a check mark. -->
+      <article class="min-w-0 bg-[#1d1d1d] border border-live-line rounded-md flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-live-line">
+          <h3 class="font-bold tracking-wide uppercase text-sm"><span class="text-live-orange">&#9632;</span> Bracketed Output</h3>
+          <span id="outputCount" class="font-mono text-xs text-live-dim">&ndash;</span>
+        </div>
+        <div class="px-4 py-2 text-xs text-live-dim flex items-center justify-between gap-3">
+          <span>Click a section to copy it without its name &middot; Copy all keeps the names</span>
+          <span class="shrink-0 font-mono"><span id="progress"></span> <button id="resetBtn" type="button" class="underline hover:text-live-text ml-1">reset</button></span>
+        </div>
+        <div id="output" class="list flex-1 min-h-[28rem] max-h-[38rem] lg:min-h-0 lg:max-h-none overflow-y-auto mx-4 bg-[#161616] border border-live-line rounded p-2 space-y-2"></div>
+        <div class="p-4 flex gap-2">
+          <button id="nextBtn" type="button"
+            class="flex-1 bg-live-orange text-[#161616] font-bold uppercase tracking-wider text-sm py-3 rounded hover:brightness-110 active:brightness-95 transition">Copy next</button>
+          <button id="allBtn" type="button"
+            class="border border-live-orange text-live-orange font-bold uppercase tracking-wider text-xs px-4 rounded hover:bg-live-orange hover:text-[#161616] transition">Copy all</button>
+        </div>
+      </article>
+    </div>
 
-    <script>
-        // Default Input Text
-        const defaultText = `INTRO X2
+    <!-- Lines that look like chord lines but contain one unrecognized token -->
+    <div id="noticePanel" class="hidden shrink-0 border border-live-line rounded-md">
+      <div class="flex items-center justify-between px-4 py-2.5 border-b border-live-line">
+        <h3 class="font-bold tracking-wide uppercase text-sm">Check These Lines</h3>
+        <span id="noticeCount" class="font-mono text-xs text-live-dim"></span>
+      </div>
+      <ul id="noticeList" class="max-h-32 overflow-y-auto divide-y divide-live-line text-sm"></ul>
+    </div>
+  </main>
+
+  <!-- ===================== Core logic (DOM-agnostic, testable) ===================== -->
+  <script id="core">
+  const Chords = (() => {
+    // Root, quality, extension, sus, any number of alterations (add9, b5, #11, no3...), 6/9 and slash bass.
+    // Only real chord numbers are allowed, so "C1234" is not a chord.
+    const CHORD = /^[A-G][b#]?(?:maj|min|mmaj|mMaj|m|aug|dim|°|ø|\+)?(?:2|4|5|6|7|9|11|13)?(?:sus(?:2|4|9|11|13)?)?/.source +
+      /(?:add(?:2|4|9|11|13)|no[35]|[b#](?:4|5|6|9|11|13))*(?:\/9)?(?:\/[A-G][b#]?)?$/.source;
+    const CHORD_RE = new RegExp(CHORD);
+    // Tokens allowed on a chord line without being chords: ( ) | - and repeat marks like x2 / 2x.
+    const DECORATION = /^(?:[()|\-\/]|[xX×]\d+|\d+[xX×])$/;
+
+    // A section name only counts as a header when it is the whole line, plus a number, "x2", ":", a note
+    // in parentheses ("CORO (Final)") or after a dash ("Verso 1 - Tono B"). Lyrics such as
+    // "Final de los tiempos" or "Coronado" stay lyrics.
+    const SECTION_WORDS = 'intro|verso|verse|coro|chorus|estribillo|pre[- ]?coro|pre[- ]?chorus|pre[- ]?estribillo|puente|bridge|' +
+      'interludio|interlude|instrumental|outro|salida|final|ending|turnaround|vamp|tag|coda|refrain|complex|' +
+      '(?:primera|segunda|tercera|cuarta) parte|parte';
+    const SECTION = new RegExp(`^(?:${SECTION_WORDS})(?:\\s+(?:\\d+|[ivx]+))?\\s*:?(?:\\s*(?:[x×]\\s*\\d+|\\d+\\s*[x×]))?` +
+      `(?:\\s*\\([^)]*\\))?(?:\\s+[-–—]\\s+.+)?\\s*:?$`, 'i');
+    const BRACKETED = /^\[([^\]]+)\]$/;
+
+    const isChord = (t) => CHORD_RE.test(t);
+    // "(E", "F#)" and "|B" are chords with a parenthesis or bar line attached.
+    const chordCore = (t) => t.replace(/^[(|]+/, '').replace(/[)|]+$/, '');
+
+    function headerText(s) {
+      const b = s.match(BRACKETED);
+      if (b) return isChord(b[1].trim()) ? null : b[1].trim();
+      return SECTION.test(s) ? s : null;
+    }
+
+    const TAB = 8; // the textarea's default tab-size, so columns match what the user sees
+
+    // Columns are UTF-16 units after NFC: "é" is one even when pasted as e + accent, and an emoji is two,
+    // which matches the two columns it takes in a monospace font. nbsp becomes a space and tabs expand
+    // to the next tab stop.
+    function normalize(s) {
+      let out = '', col = 0;
+      for (const ch of s.normalize('NFC')) {
+        if (ch === '\t') { const n = TAB - (col % TAB); out += ' '.repeat(n); col += n; }
+        else { out += ch === '\u00A0' ? ' ' : ch; col += ch.length; }
+      }
+      return out.trimEnd();
+    }
+
+    function tokenize(line) {
+      const out = [];
+      for (const m of line.matchAll(/\S+/g)) out.push({ text: m[0], index: m.index });
+      return out;
+    }
+
+    function countTokens(tokens) {
+      let chords = 0, bad = 0;
+      for (const t of tokens) {
+        if (isChord(chordCore(t.text))) chords++;
+        else if (!DECORATION.test(t.text)) bad++;
+      }
+      return { chords, bad };
+    }
+
+    // Every token a chord or decoration, at least one chord.
+    function chordTokens(tokens) {
+      const { chords, bad } = countTokens(tokens);
+      return !bad && chords > 0;
+    }
+
+    // All tokens but one are chords: probably a chord line with a typo or an unsupported chord. It is
+    // left as text, flagged, and never used as the lyric of the chord line above it.
+    function looksLikeChordLine(tokens) {
+      const { chords, bad } = countTokens(tokens);
+      return bad === 1 && chords >= 2;
+    }
+
+    function classify(raw) {
+      const line = normalize(raw);
+      const trimmed = line.trim();
+      if (!trimmed) return { type: 'blank' };
+      const header = headerText(trimmed);
+      if (header) return { type: 'header', text: header };
+      const tokens = tokenize(line);
+      if (chordTokens(tokens)) return { type: 'chords', tokens };
+      // "[Salida] E G# E" or "Intro: B E/B": a header followed by chords on the same line.
+      for (let k = 1; k < Math.min(4, tokens.length); k++) {
+        const head = headerText(tokens.slice(0, k).map((t) => t.text).join(' '));
+        const rest = tokens.slice(k);
+        if (head && chordTokens(rest)) return { type: 'headerChords', text: head, tokens: rest };
+      }
+      return { type: looksLikeChordLine(tokens) ? 'suspect' : 'text', line };
+    }
+
+    // "( E G#m F# )" -> "( [E] [G#m] [F#] )"
+    function bracketLine(tokens) {
+      return tokens.map(({ text }) => {
+        const core = chordCore(text);
+        return isChord(core) ? text.replace(core, `[${core}]`) : text;
+      }).join(' ');
+    }
+
+    // Inserts each chord into the lyric at the column it sits above. A chord that lands on a space
+    // (or past the end of the lyric) is kept apart from the previous word instead of glued to it.
+    // Decorations are dropped here: "x2" or "( )" inside a lyric would end up as lyric text.
+    function mergeLine(tokens, lyric) {
+      const chords = [];
+      for (const { text, index } of tokens) {
+        const core = chordCore(text);
+        // "(E" sits at the column of the E, not of the parenthesis.
+        if (isChord(core)) chords.push({ core, index: index + text.indexOf(core) });
+      }
+      const padded = lyric.padEnd(chords[chords.length - 1].index);
+      let out = '', pos = 0;
+      for (const { core, index } of chords) {
+        out += padded.slice(pos, index);
+        if (!/\S/.test(padded[index] || ' ') && /\S$/.test(out)) out += ' ';
+        out += `[${core}]`;
+        pos = index;
+      }
+      out += padded.slice(pos);
+      return out.replace(/\s+/g, ' ').trim();
+    }
+
+    // Returns the full text, the sections ({ text, titled, body }, split at blank lines; a lone header joins the block after it
+    // unless that block starts with its own header), notices about suspicious lines, and `at`: for each
+    // input line number (1-based), the output { section, line } it became (line -1 for a blank line
+    // inside a section), so the UI can highlight the output of the line being edited.
+    function convert(input) {
+      const lines = input.split(/\r\n?|\n/).map(classify);
+      const out = []; // { text, header, from, to }: from/to are the input lines it came from
+      const notices = [];
+      let merged = 0;
+
+      for (let i = 0; i < lines.length; i++) {
+        const l = lines[i];
+        const push = (text, header, to = i + 1) => out.push({ text, header, from: i + 1, to });
+        switch (l.type) {
+          case 'blank': push('', false); break;
+          case 'header': push(l.text, true); break;
+          case 'headerChords':
+            push(l.text, true);
+            push(bracketLine(l.tokens), false);
+            break;
+          case 'chords': {
+            const next = lines[i + 1];
+            if (next && next.type === 'text') {
+              push(mergeLine(l.tokens, next.line), false, i + 2);
+              merged++;
+              i++;
+            } else {
+              push(bracketLine(l.tokens), false);
+            }
+            break;
+          }
+          case 'suspect':
+            notices.push({ line: i + 1, text: l.line.trim() });
+            push(l.line, false);
+            break;
+          default:
+            push(l.line, false);
+        }
+      }
+
+      const blocks = [];
+      let cur = [];
+      for (const o of out) {
+        if (o.text === '') { if (cur.length) blocks.push(cur); cur = []; }
+        else cur.push(o);
+      }
+      if (cur.length) blocks.push(cur);
+
+      const sections = [];
+      const at = [];
+      for (let b = 0; b < blocks.length; b++) {
+        let block = blocks[b];
+        const next = blocks[b + 1];
+        if (block.length === 1 && block[0].header && next && !next[0].header) {
+          block = block.concat(next);
+          b++;
+        }
+        const text = block.map((o) => o.text).join('\n');
+        const titled = block[0].header;
+        // body is what "copy section" copies: the section without its name.
+        sections.push({ text, titled, body: titled ? block.slice(1).map((o) => o.text).join('\n') : text });
+        const si = sections.length - 1;
+        for (let k = block[0].from; k <= block[block.length - 1].to; k++) at[k] = { section: si, line: -1 };
+        block.forEach((o, j) => { for (let k = o.from; k <= o.to; k++) at[k] = { section: si, line: j }; });
+      }
+
+      return { text: sections.map((s) => s.text).join('\n\n'), sections, notices, merged, at };
+    }
+
+    return { convert, classify, isChord, mergeLine };
+  })();
+  if (typeof module !== 'undefined') module.exports = Chords;
+  </script>
+
+  <!-- ===================== UI ===================== -->
+  <script>
+  (() => {
+    const DEFAULT_TEXT = `INTRO X2
 B E/B
 
 VERSE 1
@@ -87,225 +343,229 @@ B          E
 
 INSTRUMENTAL
 B  E/G#  A2
-
-VAMP
-B E
 `;
 
-        // The specific regex for valid chords requested
-        const chordRegex = /^([CDEFGAB][b#]?)(m|maj|mmaj|min|aug|dim)?(1|2|4|5|6|7|9|11|13)?(sus|sus2|sus4|sus9|sus11|sus13)?(add4|add9|no3|no5|b5|#4|b9|9|11)?(\/9)?(\/[CDEFGAB][b#]?)?$/;
+    const $ = (id) => document.getElementById(id);
+    const inputEl = $('inputText'), outputEl = $('output');
+    let result = { text: '', sections: [], notices: [], merged: 0 };
+    // Check marks are keyed by section text (plus which repeat it is, for identical choruses), so editing
+    // one section keeps the marks on every section that did not change.
+    let keys = [];
+    let copied = new Set();
+    let pending = 0;
+    const COPY_ERROR = 'Could not copy to the clipboard. Select the text and press ⌘/Ctrl+C.';
 
-        // Common section headers to skip even if they accidentally match criteria
-        const sectionHeaderRegex = /^(intro|verso|verse|coro|chorus|puente|bridge|interludio|interlude|instrumental|outro|turnaround|pre-coro|pre-chorus|vamp|tag|complex|coda)/i;
-        const sectionHeaders = ['INTRO', 'VERSO', 'CORO', 'PUENTE', 'INSTRUMENTAL', 'TURNAROUND', 'OUTRO', 'PRE-CORO', 'COMPLEX'];
+    // Clipboard, with a fallback for file:// pages where navigator.clipboard may be unavailable.
+    async function copyText(text) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return true;
+      } catch (_) {
+        const ta = Object.assign(document.createElement('textarea'), { value: text, readOnly: true });
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+        document.body.append(ta);
+        ta.focus();
+        ta.select();
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+        ta.remove();
+        return ok;
+      }
+    }
 
-        let fullOutputText = "";
+    function flash(btn, text) {
+      btn.dataset.label ??= btn.textContent;
+      btn.textContent = text;
+      clearTimeout(btn._flash);
+      btn._flash = setTimeout(() => { btn.textContent = btn.dataset.label; }, 1500);
+    }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            const inputEl = document.getElementById('inputText');
-            inputEl.value = defaultText;
-            
-            // Add real-time event listener
-            inputEl.addEventListener('input', processConversion);
-            
-            // Initial conversion
-            processConversion();
+    function showError(msg) {
+      $('errorBox').textContent = msg;
+      $('errorBox').classList.toggle('hidden', !msg);
+    }
+
+    // A lone name (e.g. "CORO" as a repeat marker) has nothing to copy and is skipped.
+    const copyable = (i) => result.sections[i].body !== '';
+    const nextIndex = () => keys.findIndex((k, i) => copyable(i) && !copied.has(k));
+
+    function renderState() {
+      const n = result.sections.filter((s) => s.body !== '').length, next = nextIndex();
+      outputEl.querySelectorAll('.section').forEach((el, i) => {
+        el.dataset.copied = copied.has(keys[i]);
+        el.dataset.next = i === next;
+      });
+      $('progress').textContent = n ? `${copied.size}/${n}` : '';
+      $('nextBtn').disabled = $('allBtn').disabled = !n;
+      $('nextBtn').classList.toggle('opacity-40', !n || next < 0);
+    }
+
+    function render() {
+      pending = 0;
+      result = Chords.convert(inputEl.value);
+      const seen = new Map();
+      keys = result.sections.map(({ text }) => {
+        const n = (seen.get(text) || 0) + 1;
+        seen.set(text, n);
+        return `${n}\u0000${text}`;
+      });
+      copied = new Set(keys.filter((k) => copied.has(k)));
+      const lines = inputEl.value ? inputEl.value.split('\n').length : 0;
+      $('inputCount').textContent = lines ? `${lines} lines` : '–';
+      $('outputCount').textContent = result.sections.length
+        ? `${result.sections.length} sections · ${result.merged} merged` : '–';
+
+      // Flagged input lines, by output section and line, so the card shows them before it is copied.
+      const flagged = new Map(); // section -> Map(output line -> input line)
+      for (const { line } of result.notices) {
+        const hit = result.at[line];
+        if (!flagged.has(hit.section)) flagged.set(hit.section, new Map());
+        flagged.get(hit.section).set(hit.line, line);
+      }
+
+      const frag = document.createDocumentFragment();
+      result.sections.forEach(({ text, titled, body }, i) => {
+        const warn = flagged.get(i);
+        const el = document.createElement('button');
+        el.type = 'button';
+        el.dataset.index = i;
+        if (!body) { el.disabled = true; el.title = 'Nothing to copy'; }
+        el.className = 'section group relative block w-full text-left bg-[#1d1d1d] border border-live-line rounded px-3 py-2.5 hover:border-live-dim disabled:opacity-50 disabled:hover:border-live-line disabled:cursor-default transition-colors';
+        el.innerHTML = '<span class="absolute top-2 right-2 flex gap-3 font-mono text-xs">' +
+          '<span class="warn hidden text-live-yellow"></span><span class="check hidden text-live-green">&#10003; copied</span></span>' +
+          '<pre class="font-mono text-[13px] leading-relaxed whitespace-pre overflow-x-auto pr-16"></pre>';
+        const pre = el.lastChild;
+        if (warn) {
+          const lines = [...warn.values()];
+          el.querySelector('.warn').textContent = `\u26A0 check line ${lines.join(', ')}`;
+          el.querySelector('.warn').classList.remove('hidden');
+          el.title = 'Contains a line that was left as text: fix it before pasting';
+        }
+        // One block per line so the line under the input cursor can be highlighted. Section names are
+        // dimmed (shown but not copied), chords orange, lyrics in the default text color.
+        text.split('\n').forEach((line, j) => {
+          const row = document.createElement('span');
+          row.className = 'out-line block -mx-1 px-1 rounded-sm';
+          if (warn?.has(j)) row.classList.add('text-live-yellow', 'underline', 'decoration-wavy', 'decoration-live-yellow/60');
+          pre.append(row);
+          if (j === 0 && titled) {
+            row.classList.add('font-semibold', 'text-live-dim');
+            row.textContent = line;
+            return;
+          }
+          for (const part of line.split(/(\[[^\]]+\])/)) {
+            if (!part) continue;
+            if (part[0] === '[') {
+              const c = document.createElement('span');
+              c.className = 'text-live-orange';
+              c.textContent = part;
+              row.append(c);
+            } else row.append(part);
+          }
         });
+        frag.append(el);
+      });
+      if (!result.sections.length) {
+        const empty = document.createElement('p');
+        empty.className = 'p-6 text-center text-sm text-live-dim';
+        empty.textContent = 'Paste a chord chart on the left.';
+        frag.append(empty);
+      }
+      outputEl.replaceChildren(frag);
 
-        function clearInput() {
-            document.getElementById('inputText').value = '';
-            document.getElementById('outputContainer').innerHTML = '';
-            fullOutputText = "";
-        }
+      $('noticePanel').classList.toggle('hidden', !result.notices.length);
+      $('noticeCount').textContent = result.notices.length ? `${result.notices.length} left as text` : '';
+      $('noticeList').replaceChildren(...result.notices.map(({ line, text }) => {
+        const li = document.createElement('li');
+        li.innerHTML = '<button type="button" class="w-full px-4 py-2 flex gap-3 items-baseline text-left hover:bg-live-raised transition-colors">' +
+          '<span class="text-live-yellow font-mono text-xs shrink-0"></span><span class="font-mono text-[13px] truncate"></span>' +
+          '<span class="ml-auto text-xs text-live-dim shrink-0">unrecognized chord? &middot; <span class="underline">show in input</span></span></button>';
+        const btn = li.firstChild;
+        btn.children[0].textContent = `line ${line}`;
+        btn.children[1].textContent = text;
+        btn.addEventListener('click', () => goToLine(line));
+        return li;
+      }));
+      renderState();
+      highlight();
+    }
 
-        function copyOutput() {
-            if (!fullOutputText) return;
-            
-            // Use execCommand to bypass iFrame clipboard API restrictions
-            const textArea = document.createElement("textarea");
-            textArea.value = fullOutputText;
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-            } catch (err) {
-                console.error('Copy failed', err);
-            }
-            document.body.removeChild(textArea);
-            
-            const btn = document.getElementById('copyBtn');
-            const originalContent = btn.innerHTML;
-            btn.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copied!`;
-            setTimeout(() => {
-                btn.innerHTML = originalContent;
-            }, 2000);
-        }
+    // Scrolls the output panel (not the page) just enough to show el.
+    function revealInOutput(el) {
+      const box = outputEl.getBoundingClientRect(), r = el.getBoundingClientRect();
+      if (r.top < box.top) outputEl.scrollTop -= box.top - r.top + 8;
+      else if (r.bottom > box.bottom) outputEl.scrollTop += r.bottom - box.bottom + 8;
+    }
 
-        function copySection(indicator, text) {
-            // Use execCommand to bypass iFrame clipboard API restrictions
-            const textArea = document.createElement("textarea");
-            textArea.value = text;
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-            try {
-                document.execCommand('copy');
-            } catch (err) {
-                console.error('Copy failed', err);
-            }
-            document.body.removeChild(textArea);
-            
-            indicator.innerHTML = "Copied!";
-            indicator.classList.remove('bg-slate-700', 'text-slate-300');
-            indicator.classList.add('bg-emerald-600', 'text-white');
-            
-            setTimeout(() => {
-                indicator.innerHTML = "Click to copy";
-                indicator.classList.remove('bg-emerald-600', 'text-white');
-                indicator.classList.add('bg-slate-700', 'text-slate-300');
-            }, 2000);
-        }
+    // Highlights the output section and line made from the input line under the cursor.
+    function highlight() {
+      for (const el of outputEl.querySelectorAll('[data-active]')) el.removeAttribute('data-active');
+      if (document.activeElement !== inputEl) return;
+      const line = inputEl.value.slice(0, inputEl.selectionStart).split('\n').length;
+      const hit = result.at[line];
+      if (!hit) return;
+      const card = outputEl.children[hit.section];
+      card.dataset.active = 'true';
+      revealInOutput(card);
+      if (hit.line < 0) return;
+      const row = card.querySelectorAll('.out-line')[hit.line];
+      row.dataset.active = 'true';
+      revealInOutput(row); // a tall section may still hide the line
+    }
 
-        // Replaces \u00A0 and tabs with standard spaces
-        function normalizeSpaces(str) {
-            return str.replace(/[\u00A0\t]/g, ' ');
-        }
+    // Selects input line n (1-based) and scrolls the textarea so it sits about a third of the way down.
+    function goToLine(n) {
+      const lines = inputEl.value.split('\n');
+      if (n > lines.length) return;
+      const start = lines.slice(0, n - 1).reduce((sum, l) => sum + l.length + 1, 0);
+      inputEl.focus({ preventScroll: true });
+      inputEl.setSelectionRange(start, start + lines[n - 1].length);
+      const lineHeight = parseFloat(getComputedStyle(inputEl).lineHeight) || 20;
+      inputEl.scrollTop = Math.max(0, (n - 1) * lineHeight - inputEl.clientHeight / 3);
+      inputEl.scrollIntoView({ block: 'nearest' }); // stacked layout: the input may be off screen
+    }
 
-        function isSectionHeader(line) {
-            return sectionHeaderRegex.test(line.trim());
-        }
+    // Coalesce fast typing into one render per frame.
+    const schedule = () => { if (!pending) pending = requestAnimationFrame(render); };
 
-        function isChordLine(line) {
-            if (line.trim() === '') return false;
-            if (isSectionHeader(line)) return false;
+    // The input can change while the clipboard call is pending, so the section is looked up again
+    // by key afterwards instead of trusting the index.
+    async function copySection(i) {
+      const key = keys[i];
+      if (!copyable(i)) return;
+      if (await copyText(result.sections[i].body)) {
+        showError('');
+        const now = keys.indexOf(key);
+        if (now < 0) return; // that section no longer exists
+        copied.add(key);
+        renderState();
+        outputEl.children[now].scrollIntoView({ block: 'nearest' });
+      } else showError(COPY_ERROR);
+    }
 
-            const tokens = line.trim().split(/\s+/);
-            
-            // If every single word on the line matches the chord regex, it's a chord line
-            for (let i = 0; i < tokens.length; i++) {
-                if (!chordRegex.test(tokens[i])) {
-                    return false;
-                }
-            }
-            return true;
-        }
+    outputEl.addEventListener('click', (e) => {
+      const el = e.target.closest('.section');
+      if (el) copySection(+el.dataset.index);
+    });
+    $('nextBtn').addEventListener('click', () => {
+      const i = nextIndex();
+      if (i >= 0) copySection(i);
+      else flash($('nextBtn'), 'All copied');
+    });
+    $('allBtn').addEventListener('click', async () => {
+      if (!result.text) return;
+      if (await copyText(result.text)) { showError(''); flash($('allBtn'), 'Copied'); }
+      else showError(COPY_ERROR);
+    });
+    $('resetBtn').addEventListener('click', () => { copied.clear(); renderState(); });
+    $('clearBtn').addEventListener('click', () => { inputEl.value = ''; render(); inputEl.focus(); });
+    inputEl.addEventListener('input', schedule);
+    for (const ev of ['keyup', 'click', 'select', 'focus', 'blur']) inputEl.addEventListener(ev, highlight);
+    document.addEventListener('selectionchange', () => { if (document.activeElement === inputEl) highlight(); });
 
-        function processConversion() {
-            const inputText = document.getElementById('inputText').value;
-            const lines = inputText.split('\n');
-            const outputLines = [];
-
-            for (let i = 0; i < lines.length; i++) {
-                // Normalize spaces first to ensure accurate index measurement
-                const rawLine = lines[i];
-                const normalizedLine = normalizeSpaces(rawLine);
-
-                // Preserve empty lines
-                if (normalizedLine.trim().length === 0) {
-                    outputLines.push(rawLine); // Keep original empty line formatting just in case
-                    continue;
-                }
-
-                if (isChordLine(normalizedLine)) {
-                    // Check if the next line is a valid lyric line
-                    let isNextLineLyric = false;
-                    let nextLineRaw = '';
-                    let nextLineNorm = '';
-
-                    if (i + 1 < lines.length) {
-                        nextLineRaw = lines[i + 1];
-                        nextLineNorm = normalizeSpaces(nextLineRaw);
-                        
-                        // A lyric line shouldn't be empty, shouldn't be another chord line, and shouldn't be a section header
-                        if (nextLineNorm.trim().length > 0 && !isChordLine(nextLineNorm) && !isSectionHeader(nextLineNorm)) {
-                            isNextLineLyric = true;
-                        }
-                    }
-
-                    if (isNextLineLyric) {
-                        // We have a Chord line + Lyric line combo
-                        const chords = [];
-                        const tokenRegex = /\S+/g;
-                        let match;
-                        
-                        // Extract chords and their exact index based on the normalized line
-                        while ((match = tokenRegex.exec(normalizedLine)) !== null) {
-                            chords.push({ text: match[0], index: match.index });
-                        }
-
-                        // Process from Right to Left (Descending order)
-                        chords.sort((a, b) => b.index - a.index);
-
-                        let resultLyric = nextLineNorm; // Base the result on normalized lyrics
-
-                        for (const chord of chords) {
-                            const idx = chord.index;
-
-                            // If index is beyond lyric length, pad lyrics with spaces
-                            while (resultLyric.length < idx) {
-                                resultLyric += " ";
-                            }
-
-                            // Insert [Chord] precisely at the index column
-                            resultLyric = resultLyric.substring(0, idx) + `[${chord.text}]` + resultLyric.substring(idx);
-                        }
-
-                        // Collapse extra spaces in the final lyric line to make it neat
-                        resultLyric = resultLyric.replace(/\s+/g, ' ').trim();
-
-                        outputLines.push(resultLyric);
-
-                        // Skip the next line since we merged it
-                        i++;
-                    } else {
-                        // Standalone chord line (e.g. INTRO, INSTRUMENTAL, or followed by another chord line)
-                        // Extract tokens and wrap them sequentially
-                        const chords = normalizedLine.trim().split(/\s+/);
-                        const bracketedChords = chords.map(c => `[${c}]`).join(' ');
-                        outputLines.push(bracketedChords);
-                    }
-                } else {
-                    // If it's a section header or an un-matched regular line, output as-is
-                    // We trim trailing spaces to clean up formatting
-                    outputLines.push(rawLine.trimEnd());
-                }
-            }
-
-            fullOutputText = outputLines.join('\n');
-            renderOutputSections(fullOutputText);
-        }
-
-        function renderOutputSections(finalText) {
-            const container = document.getElementById('outputContainer');
-            container.innerHTML = '';
-            
-            if (!finalText.trim()) return;
-
-            // Split text by blank lines to isolate each section
-            const sections = finalText.split(/\n\s*\n/);
-
-            sections.forEach(section => {
-                if (!section.trim()) return;
-
-                const card = document.createElement('div');
-                card.className = "bg-slate-800 rounded-lg p-4 relative group border border-slate-700 hover:border-indigo-500/50 transition-colors cursor-pointer";
-
-                const pre = document.createElement('pre');
-                pre.className = "font-mono text-[14px] text-indigo-300 whitespace-pre overflow-x-auto pb-2 pointer-events-none";
-                pre.textContent = section;
-
-                const indicator = document.createElement('div');
-                indicator.className = "absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-700 text-slate-300 text-xs py-1.5 px-3 rounded shadow-md font-medium z-10 pointer-events-none";
-                indicator.innerHTML = "Click to copy";
-
-                card.onclick = () => copySection(indicator, section);
-
-                card.appendChild(pre);
-                card.appendChild(indicator);
-                container.appendChild(card);
-            });
-        }
-    </script>
+    inputEl.value = DEFAULT_TEXT;
+    render();
+  })();
+  </script>
 </body>
 </html>

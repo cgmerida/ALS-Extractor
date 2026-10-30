@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Chord Converter: two of the header's bars inside orange [brackets] -->
+  <rect width="32" height="32" rx="6" fill="#161616"/>
+  <path d="M10 6H6v20h4M22 6h4v20h-4" fill="none" stroke="#ff764d" stroke-width="3"/>
+  <g fill="#e6e6e6">
+    <rect x="12" y="10" width="3" height="12"/>
+    <rect x="17" y="10" width="3" height="12"/>
+  </g>
+</svg>
