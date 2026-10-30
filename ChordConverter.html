@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MultiTracks Chord Converter</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Custom scrollbar for textareas */
+        textarea::-webkit-scrollbar { width: 8px; }
+        textarea::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
+        textarea::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        textarea::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen flex flex-col antialiased">
+
+    <!-- Header -->
+    <header class="bg-slate-900 border-b border-slate-800 py-4 px-6 shadow-sm">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 p-2 rounded-lg text-white">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path>
+                    </svg>
+                </div>
+                <h1 class="text-xl font-semibold text-white tracking-tight">MultiTracks Chord Converter</h1>
+            </div>
+            <button onclick="copyOutput()" id="copyBtn" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg shadow-lg shadow-indigo-500/20 transition-all active:scale-95 focus:outline-none">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+                </svg>
+                Copy Output
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-grow max-w-7xl mx-auto w-full p-4 sm:p-6 flex flex-col lg:flex-row gap-6">
+        
+        <!-- Input Side -->
+        <div class="flex-1 flex flex-col bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden min-h-[500px]">
+            <div class="px-4 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
+                <span class="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Input Chart
+                </span>
+                <button onclick="clearInput()" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">Clear</button>
+            </div>
+            <textarea id="inputText" class="flex-grow bg-slate-950/50 text-slate-300 font-mono text-[14px] leading-relaxed p-4 resize-none focus:outline-none focus:ring-1 focus:ring-indigo-500/50 whitespace-pre" spellcheck="false"></textarea>
+        </div>
+
+        <!-- Output Side -->
+        <div class="flex-1 flex flex-col bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden min-h-[500px]">
+            <div class="px-4 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
+                <span class="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Bracketed Output
+                </span>
+            </div>
+            <textarea id="outputText" readonly class="flex-grow bg-slate-950/50 text-indigo-300 font-mono text-[14px] leading-relaxed p-4 resize-none focus:outline-none whitespace-pre" spellcheck="false" placeholder="Result will appear here..."></textarea>
+        </div>
+
+    </main>
+
+    <script>
+        // Default Input Text
+        const defaultText = `INTRO X2
+B E/B 
+
+VERSO 1
+B                     E
+ Vi caer al enemigo
+B                                  E
+ Vi a la oscuridad huyendo
+G#m                    E
+ Pero el milagro que yo no comprendo
+ G#m            F# E
+ Mi nombre escrito está en el cielo
+`;
+
+        // The specific regex for valid chords requested
+        const chordRegex = /^([CDEFGAB][b#]?)(m|maj|mmaj|min|aug|dim)?(1|2|4|5|6|7|9|11|13)?(sus|sus2|sus4|sus9|sus11|sus13)?(add4|add9|no3|no5|b5|#4|b9|9|11)?(\/9)?(\/[CDEFGAB][b#]?)?$/;
+
+        // Common section headers to skip even if they accidentally match criteria
+        const sectionHeaders = ['INTRO', 'VERSO', 'CORO', 'PUENTE', 'INSTRUMENTAL', 'TURNAROUND', 'OUTRO', 'PRE-CORO', 'COMPLEX'];
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputEl = document.getElementById('inputText');
+            inputEl.value = defaultText;
+            
+            // Add real-time event listener
+            inputEl.addEventListener('input', processConversion);
+            
+            // Initial conversion
+            processConversion();
+        });
+
+        function clearInput() {
+            document.getElementById('inputText').value = '';
+            document.getElementById('outputText').value = '';
+        }
+
+        function copyOutput() {
+            const outputText = document.getElementById('outputText');
+            if (!outputText.value) return;
+
+            outputText.select();
+            
+            // Try modern clipboard API first, fallback to execCommand
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(outputText.value);
+            } else {
+                document.execCommand('copy');
+            }
+            
+            const btn = document.getElementById('copyBtn');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Copied!`;
+            setTimeout(() => {
+                btn.innerHTML = originalContent;
+            }, 2000);
+        }
+
+        // Replaces \u00A0 and tabs with standard spaces
+        function normalizeSpaces(str) {
+            return str.replace(/[\u00A0\t]/g, ' ');
+        }
+
+        function isSectionHeader(line) {
+            const upperLine = line.trim().toUpperCase();
+            return sectionHeaders.some(header => upperLine.startsWith(header));
+        }
+
+        function isChordLine(line) {
+            if (line.trim() === '') return false;
+            if (isSectionHeader(line)) return false;
+
+            const tokens = line.trim().split(/\s+/);
+            
+            // If every single word on the line matches the chord regex, it's a chord line
+            for (let i = 0; i < tokens.length; i++) {
+                if (!chordRegex.test(tokens[i])) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        function processConversion() {
+            const inputText = document.getElementById('inputText').value;
+            const lines = inputText.split('\n');
+            const outputLines = [];
+
+            for (let i = 0; i < lines.length; i++) {
+                // Normalize spaces first to ensure accurate index measurement
+                const rawLine = lines[i];
+                const normalizedLine = normalizeSpaces(rawLine);
+
+                // Preserve empty lines
+                if (normalizedLine.trim().length === 0) {
+                    outputLines.push(rawLine); // Keep original empty line formatting just in case
+                    continue;
+                }
+
+                if (isChordLine(normalizedLine)) {
+                    // Check if the next line is a valid lyric line
+                    let isNextLineLyric = false;
+                    let nextLineRaw = '';
+                    let nextLineNorm = '';
+
+                    if (i + 1 < lines.length) {
+                        nextLineRaw = lines[i + 1];
+                        nextLineNorm = normalizeSpaces(nextLineRaw);
+                        
+                        // A lyric line shouldn't be empty, shouldn't be another chord line, and shouldn't be a section header
+                        if (nextLineNorm.trim().length > 0 && !isChordLine(nextLineNorm) && !isSectionHeader(nextLineNorm)) {
+                            isNextLineLyric = true;
+                        }
+                    }
+
+                    if (isNextLineLyric) {
+                        // We have a Chord line + Lyric line combo
+                        const chords = [];
+                        const tokenRegex = /\S+/g;
+                        let match;
+                        
+                        // Extract chords and their exact index based on the normalized line
+                        while ((match = tokenRegex.exec(normalizedLine)) !== null) {
+                            chords.push({ text: match[0], index: match.index });
+                        }
+
+                        // Process from Right to Left (Descending order)
+                        chords.sort((a, b) => b.index - a.index);
+
+                        let resultLyric = nextLineNorm; // Base the result on normalized lyrics
+
+                        for (const chord of chords) {
+                            const idx = chord.index;
+
+                            // If index is beyond lyric length, pad lyrics with spaces
+                            while (resultLyric.length < idx) {
+                                resultLyric += " ";
+                            }
+
+                            // Insert [Chord] precisely at the index column
+                            resultLyric = resultLyric.substring(0, idx) + `[${chord.text}]` + resultLyric.substring(idx);
+                        }
+
+                        // Collapse extra spaces in the final lyric line to make it neat
+                        resultLyric = resultLyric.replace(/\s+/g, ' ').trim();
+
+                        outputLines.push(resultLyric);
+
+                        // Skip the next line since we merged it
+                        i++;
+                    } else {
+                        // Standalone chord line (e.g. INTRO, INSTRUMENTAL, or followed by another chord line)
+                        // Extract tokens and wrap them sequentially
+                        const chords = normalizedLine.trim().split(/\s+/);
+                        const bracketedChords = chords.map(c => `[${c}]`).join(' ');
+                        outputLines.push(bracketedChords);
+                    }
+                } else {
+                    // If it's a section header or an un-matched regular line, output as-is
+                    // We trim trailing spaces to clean up formatting
+                    outputLines.push(rawLine.trimEnd());
+                }
+            }
+
+            document.getElementById('outputText').value = outputLines.join('\n');
+        }
+    </script>
+</body>
+</html>
