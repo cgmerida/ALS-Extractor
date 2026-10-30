@@ -8,7 +8,14 @@
 - [ ] **Secuencias MIDI import.** Import the exported `.mid` of `Build My Life` (not `MultiTrack`: its stepped tempo gives the same result either way, so it can't tell the two apart) and check `Ending`. 06:24:169 means Secuencias steps MIDI tempo like a standard player (exact). About 06:24:188 means it interpolates between tempo events; the export is then a few tens of ms off after a ramp. That's acceptable, but worth knowing.
 - [ ] **Accents in MIDI markers.** Marker text is written as UTF-8. Check that a name with accents/ñ shows correctly after import.
 - [ ] **Section-name standard.** The linter's list (`SECTION_NAMES` / `NAME_SUGGESTIONS` in `index.html`) is a sensible default, not an official Secuencias list. Replace it if Secuencias publishes one.
-- [ ] **GitHub Pages.** Push to a repo, set Settings → Pages → Source to "GitHub Actions". Decide whether `tests/fixtures/*.als` may be public (a public repo exposes them even though the site doesn't).
+- [x] **GitHub Pages.** Live at https://cgmerida.github.io/ALS-Extractor/, served straight from `main` (Settings → Pages → Deploy from a branch); no build step needed.
+- [ ] **Public test fixtures.** The repo is public and Pages serves the whole branch, so `tests/fixtures/*.als` can be downloaded from the repo *and* from the site (e.g. `/tests/fixtures/MultiTrack-live8.als`). Decide whether that's fine; if not, remove them from the repo (and its history) and keep them locally.
+
+## Chord Converter
+- [ ] **Paste into MultiTracks.** Copy a few sections from `ChordConverter.html` and paste them into MultiTracks. Check that chords land on the right syllables, that a chord over a space (`so [G#m] [E] te`) reads well, and whether the leading space in `[B] Vi caer` matters. The tests only check the converter's text, not how MultiTracks reads it.
+- [ ] **Tab width.** Tabs expand to 8 columns (the textarea's default). If your charts come from an editor that uses 4-column tabs, chords after a tab will land too far right; change `TAB` in `ChordConverter.html`.
+- [ ] **Section names.** Headers are recognized from a fixed English/Spanish list (`SECTION_WORDS`). Any other name only works in brackets (`[Coda Final]`). Add names you use often.
+- [ ] **Known limits (pinned in `tests/chords.test.js`).** `x2`, `( )` and `|` on a chord line are dropped when it merges into a lyric; a one-word lyric that is a section name (`Final`) reads as a header. Change only if your charts hit these.
 
 ## Earlier items
 - [ ] **Curved tempo ramps (Live 11+).** First decide whether your sets use them at all; if not, the existing warning is enough. If yes, provide a test set: 120 BPM at bar 1 → 90 BPM at bar 9, curve the segment (Alt/Option-drag), a locator at bar 13, and the min:sec time Ableton shows for that locator.

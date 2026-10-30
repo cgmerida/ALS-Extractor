@@ -1,7 +1,7 @@
 {
   "name": "als-extractor",
   "private": true,
-  "description": "Ableton Live Set to Secuencias.com extractor — regression tests for index.html",
+  "description": "Ableton Live Set to Secuencias.com extractor and chord chart converter — regression tests for index.html and ChordConverter.html",
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\""
   },
