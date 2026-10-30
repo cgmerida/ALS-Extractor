@@ -58,10 +58,12 @@
         <div class="flex-1 flex flex-col bg-slate-900 rounded-xl border border-slate-800 shadow-xl overflow-hidden min-h-[500px]">
             <div class="px-4 py-3 border-b border-slate-800 bg-slate-900 flex justify-between items-center">
                 <span class="text-sm font-medium text-slate-300 flex items-center gap-2">
-                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Bracketed Output
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Bracketed Output (Click section to copy)
                 </span>
             </div>
-            <textarea id="outputText" readonly class="flex-grow bg-slate-950/50 text-indigo-300 font-mono text-[14px] leading-relaxed p-4 resize-none focus:outline-none whitespace-pre" spellcheck="false" placeholder="Result will appear here..."></textarea>
+            <div id="outputContainer" class="flex-grow bg-slate-950/50 p-4 overflow-y-auto space-y-4 h-[500px] lg:h-auto custom-scrollbar">
+                <!-- Sections will be rendered here -->
+            </div>
         </div>
 
     </main>
@@ -69,24 +71,35 @@
     <script>
         // Default Input Text
         const defaultText = `INTRO X2
-B E/B 
+B E/B
 
-VERSO 1
+VERSE 1
 B                     E
  Vi caer al enemigo
-B                                  E
- Vi a la oscuridad huyendo
-G#m                    E
- Pero el milagro que yo no comprendo
- G#m            F# E
- Mi nombre escrito está en el cielo
+
+PRE-CHORUS
+G#m      F#
+ We will sing
+
+CHORUS
+B          E
+ We lift you high
+
+INSTRUMENTAL
+B  E/G#  A2
+
+VAMP
+B E
 `;
 
         // The specific regex for valid chords requested
         const chordRegex = /^([CDEFGAB][b#]?)(m|maj|mmaj|min|aug|dim)?(1|2|4|5|6|7|9|11|13)?(sus|sus2|sus4|sus9|sus11|sus13)?(add4|add9|no3|no5|b5|#4|b9|9|11)?(\/9)?(\/[CDEFGAB][b#]?)?$/;
 
         // Common section headers to skip even if they accidentally match criteria
+        const sectionHeaderRegex = /^(intro|verso|verse|coro|chorus|puente|bridge|interludio|interlude|instrumental|outro|turnaround|pre-coro|pre-chorus|vamp|tag|complex|coda)/i;
         const sectionHeaders = ['INTRO', 'VERSO', 'CORO', 'PUENTE', 'INSTRUMENTAL', 'TURNAROUND', 'OUTRO', 'PRE-CORO', 'COMPLEX'];
+
+        let fullOutputText = "";
 
         document.addEventListener('DOMContentLoaded', () => {
             const inputEl = document.getElementById('inputText');
@@ -101,21 +114,25 @@ G#m                    E
 
         function clearInput() {
             document.getElementById('inputText').value = '';
-            document.getElementById('outputText').value = '';
+            document.getElementById('outputContainer').innerHTML = '';
+            fullOutputText = "";
         }
 
         function copyOutput() {
-            const outputText = document.getElementById('outputText');
-            if (!outputText.value) return;
-
-            outputText.select();
+            if (!fullOutputText) return;
             
-            // Try modern clipboard API first, fallback to execCommand
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(outputText.value);
-            } else {
+            // Use execCommand to bypass iFrame clipboard API restrictions
+            const textArea = document.createElement("textarea");
+            textArea.value = fullOutputText;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
                 document.execCommand('copy');
+            } catch (err) {
+                console.error('Copy failed', err);
             }
+            document.body.removeChild(textArea);
             
             const btn = document.getElementById('copyBtn');
             const originalContent = btn.innerHTML;
@@ -125,14 +142,38 @@ G#m                    E
             }, 2000);
         }
 
+        function copySection(indicator, text) {
+            // Use execCommand to bypass iFrame clipboard API restrictions
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+            } catch (err) {
+                console.error('Copy failed', err);
+            }
+            document.body.removeChild(textArea);
+            
+            indicator.innerHTML = "Copied!";
+            indicator.classList.remove('bg-slate-700', 'text-slate-300');
+            indicator.classList.add('bg-emerald-600', 'text-white');
+            
+            setTimeout(() => {
+                indicator.innerHTML = "Click to copy";
+                indicator.classList.remove('bg-emerald-600', 'text-white');
+                indicator.classList.add('bg-slate-700', 'text-slate-300');
+            }, 2000);
+        }
+
         // Replaces \u00A0 and tabs with standard spaces
         function normalizeSpaces(str) {
             return str.replace(/[\u00A0\t]/g, ' ');
         }
 
         function isSectionHeader(line) {
-            const upperLine = line.trim().toUpperCase();
-            return sectionHeaders.some(header => upperLine.startsWith(header));
+            return sectionHeaderRegex.test(line.trim());
         }
 
         function isChordLine(line) {
@@ -231,7 +272,39 @@ G#m                    E
                 }
             }
 
-            document.getElementById('outputText').value = outputLines.join('\n');
+            fullOutputText = outputLines.join('\n');
+            renderOutputSections(fullOutputText);
+        }
+
+        function renderOutputSections(finalText) {
+            const container = document.getElementById('outputContainer');
+            container.innerHTML = '';
+            
+            if (!finalText.trim()) return;
+
+            // Split text by blank lines to isolate each section
+            const sections = finalText.split(/\n\s*\n/);
+
+            sections.forEach(section => {
+                if (!section.trim()) return;
+
+                const card = document.createElement('div');
+                card.className = "bg-slate-800 rounded-lg p-4 relative group border border-slate-700 hover:border-indigo-500/50 transition-colors cursor-pointer";
+
+                const pre = document.createElement('pre');
+                pre.className = "font-mono text-[14px] text-indigo-300 whitespace-pre overflow-x-auto pb-2 pointer-events-none";
+                pre.textContent = section;
+
+                const indicator = document.createElement('div');
+                indicator.className = "absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-700 text-slate-300 text-xs py-1.5 px-3 rounded shadow-md font-medium z-10 pointer-events-none";
+                indicator.innerHTML = "Click to copy";
+
+                card.onclick = () => copySection(indicator, section);
+
+                card.appendChild(pre);
+                card.appendChild(indicator);
+                container.appendChild(card);
+            });
         }
     </script>
 </body>
